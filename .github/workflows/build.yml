@@ -1,0 +1,82 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows - instalator NSIS
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verificare tipuri
+        run: npm run typecheck
+
+      - name: Build instalator
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Publică artefactele
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-windows
+          if-no-files-found: error
+          path: |
+            release/PDF-Setup-*.exe
+            release/PDF-Setup-*.exe.blockmap
+            release/latest.yml
+
+  linux:
+    name: Linux - AppImage + deb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependențe pentru pachetul deb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg
+
+      - run: npm ci
+
+      - name: Verificare tipuri
+        run: npm run typecheck
+
+      - name: Build pachete
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Publică artefactele
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-linux
+          if-no-files-found: error
+          path: |
+            release/PDF-*.AppImage
+            release/PDF-*.deb

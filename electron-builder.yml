@@ -53,5 +53,7 @@ linux:
   artifactName: PDF-${version}-${arch}.${ext}
 
 publish:
-  provider: generic
-  url: https://example.invalid/pdf
+  provider: github
+  owner: anervalens-netizen
+  repo: pdf-reader
+  releaseType: release

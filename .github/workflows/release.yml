@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag-ul release-ului (ex: v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows - instalator NSIS
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build instalator
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdf-windows
+          if-no-files-found: error
+          path: |
+            release/PDF-Setup-*.exe
+            release/PDF-Setup-*.exe.blockmap
+            release/latest.yml
+
+  linux:
+    name: Linux - AppImage + deb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependențe pentru pachetul deb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg
+
+      - run: npm ci
+
+      - name: Build pachete
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdf-linux
+          if-no-files-found: error
+          path: |
+            release/PDF-*.AppImage
+            release/PDF-*.deb
+
+  release:
+    name: Publică release-ul
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdf-windows
+          path: artifacts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdf-linux
+          path: artifacts
+
+      - name: Creează release-ul GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: PDF ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/PDF-Setup-*.exe
+            artifacts/PDF-Setup-*.exe.blockmap
+            artifacts/latest.yml
+            artifacts/PDF-*.AppImage
+            artifacts/PDF-*.deb
