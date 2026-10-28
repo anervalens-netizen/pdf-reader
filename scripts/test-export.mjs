@@ -223,6 +223,22 @@ const noFontExport = await exportAnnotatedPdf(originalForm.buffer.slice(original
 })
 if (!noFontExport.warnings.some((warning) => warning.includes('diacritice'))) failures.push('missing-font fallback warning absent')
 
+// A Latin font does not contain CJK or emoji. Never produce fake glyphs with
+// a false success toast: keep /V and tell the PDF reader to regenerate AP.
+for (const unsupportedText of ['你好，世界', 'Salut 😀']) {
+  const unsupported = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
+    formValues: [{ name: 'client', type: 'Tx', value: unsupportedText }],
+    unicodeFontBytes: unicodeBytes
+  })
+  const unsupportedDoc = await PDFDocument.load(unsupported.data)
+  if (unsupportedDoc.getForm().getTextField('client').getText() !== unsupportedText) failures.push('unsupported glyph field value was lost')
+  if (!unsupported.warnings.some((message) => message.includes('nu acoperă'))) failures.push('unsupported glyph warning missing')
+  const acroFormRef = unsupportedDoc.catalog.get(PDFName.of('AcroForm'))
+  const acroForm = unsupportedDoc.context.lookup(acroFormRef, PDFDict)
+  if (acroForm.get(PDFName.of('NeedAppearances'))?.toString() !== 'true') failures.push('unsupported glyph must request new field appearances')
+}
+console.log('unsupported CJK/emoji values preserved with warning and NeedAppearances')
+
 // Round-trip: the exported file must be re-loadable and re-savable.
 const resaved = await reloaded.save()
 if (resaved.length === 0) failures.push('round-trip save produced an empty file')
