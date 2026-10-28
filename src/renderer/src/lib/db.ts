@@ -58,8 +58,9 @@ function tx<T>(store: StoreName, mode: IDBTransactionMode, run: (s: IDBObjectSto
       new Promise<T>((resolve, reject) => {
         const transaction = db.transaction(store, mode)
         const request = run(transaction.objectStore(store))
-        request.onsuccess = () => resolve(request.result)
-        request.onerror = () => reject(request.error)
+        transaction.oncomplete = () => resolve(request.result)
+        transaction.onerror = () => reject(transaction.error ?? new Error('Tranzacția bazei de date a eșuat.'))
+        transaction.onabort = () => reject(transaction.error ?? new Error('Tranzacția bazei de date a fost anulată.'))
       })
   )
 }
@@ -117,21 +118,27 @@ export async function saveSession(record: SessionRecord): Promise<void> {
 }
 
 export async function getAnnotations(path: string): Promise<unknown[] | undefined> {
-  try {
-    const record = await tx<AnnotationRecord | undefined>('annotations', 'readonly', (store) => store.get(path))
-    return record?.annotations
-  } catch {
-    return undefined
-  }
+  // Do not mistake a database read failure for "this PDF has no notes":
+  // returning [] would allow a later edit to overwrite inaccessible data.
+  const record = await tx<AnnotationRecord | undefined>('annotations', 'readonly', (store) => store.get(path))
+  return record?.annotations
 }
 
 export async function saveAnnotations(path: string, annotations: unknown[]): Promise<void> {
-  try {
-    const record: AnnotationRecord = { path, annotations, updatedAt: Date.now() }
-    await tx('annotations', 'readwrite', (store) => store.put(record))
-  } catch (error) {
-    console.warn('[db] could not persist annotations', error)
-  }
+  const record: AnnotationRecord = { path, annotations, updatedAt: Date.now() }
+  await tx('annotations', 'readwrite', (store) => store.put(record))
+}
+
+/** Safely preserve v1.0.0 metadata when an identical file gets a v1.0.1 hash key.
+ * Never delete or overwrite the old entry. Only copies if destination is empty.
+ */
+export async function migrateLegacyMetadata(oldPath: string, newPath: string): Promise<void> {
+  if (oldPath === newPath) return
+  const [oldAnnotations, newAnnotations, oldSession, newSession] = await Promise.all([
+    getAnnotations(oldPath), getAnnotations(newPath), getSession(oldPath), getSession(newPath)
+  ])
+  if (oldAnnotations?.length && !newAnnotations?.length) await saveAnnotations(newPath, oldAnnotations)
+  if (oldSession && !newSession) await saveSession({ ...oldSession, path: newPath })
 }
 
 /** Best-effort removal of a file from the recents list when it no longer exists. */
@@ -142,6 +149,8 @@ export async function pruneMissing(): Promise<void> {
       (file) => Boolean(file),
       () => false
     )
-    if (!exists) await removeRecent(recent.path)
+    // A missing file may be on an unplugged drive. Keep the recent entry so
+    // the user can reconnect it instead of silently deleting history.
+    if (!exists) continue
   }
 }

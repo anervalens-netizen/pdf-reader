@@ -41,18 +41,17 @@ function run<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDB
       new Promise<T>((resolve, reject) => {
         const transaction = db.transaction(STORE, mode)
         const request = action(transaction.objectStore(STORE))
-        request.onsuccess = () => resolve(request.result)
-        request.onerror = () => reject(request.error)
+        transaction.oncomplete = () => resolve(request.result)
+        transaction.onerror = () => reject(transaction.error ?? new Error('Tranzacția fișierului a eșuat.'))
+        transaction.onabort = () => reject(transaction.error ?? new Error('Tranzacția fișierului a fost anulată.'))
       })
   )
 }
 
 export async function putFile(file: StoredFile): Promise<void> {
-  try {
-    await run('readwrite', (store) => store.put(file))
-  } catch (error) {
-    console.warn('[web-files] could not store file', error)
-  }
+  // Reject on quota, transaction abort or write failure. The caller must
+  // never treat an unsaved document as safely available in "Recents".
+  await run('readwrite', (store) => store.put(file))
 }
 
 export async function getFile(path: string): Promise<StoredFile | undefined> {

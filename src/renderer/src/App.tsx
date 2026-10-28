@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import { useApp, type Tool } from './state/store'
 import { api, isDesktop } from './lib/api'
-import { registerBackHandler } from './lib/native'
+import { registerBackHandler, registerPdfIntentHandler } from './lib/native'
 import { TitleBar } from './components/TitleBar'
 import { Toolbar } from './components/Toolbar'
 import { Sidebar } from './components/Sidebar'
@@ -51,6 +51,22 @@ export default function App(): JSX.Element {
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null)
   const [noteText, setNoteText] = useState('')
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // Android ACTION_VIEW: receive PDFs sent via "Open with" by file managers.
+  useEffect(() => {
+    let disposed = false
+    let unsubscribe: (() => void) | undefined
+    void registerPdfIntentHandler(
+      (file) => { if (!disposed) void openFile(file) },
+      (message) => { if (!disposed) toast(message, 'error') }
+    ).then((remove) => {
+      if (disposed) remove()
+      else unsubscribe = remove
+    }).catch((error) => {
+      if (!disposed) toast('Deschiderea PDF din Android nu este disponibilă: ' + String(error), 'error')
+    })
+    return () => { disposed = true; unsubscribe?.() }
+  }, [openFile, toast])
 
   // --- Native menu actions --------------------------------------------------
   useEffect(() => {

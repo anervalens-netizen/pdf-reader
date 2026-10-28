@@ -247,12 +247,31 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const docRef = useRef<PDFDocumentProxy | null>(null)
   const dataRef = useRef<ArrayBuffer | null>(null)
   const searchToken = useRef(0)
+  const annotationsRef = useRef<Annotation[]>([])
+  const annotationPathRef = useRef<string | null>(null)
+  const annotationWritesRef = useRef<Map<string, Promise<void>>>(new Map())
 
   const toast = useCallback((message: string, tone: Toast['tone'] = 'info') => {
     const id = createId('toast')
     dispatch({ type: 'toast/add', toast: { id, message, tone } })
     window.setTimeout(() => dispatch({ type: 'toast/remove', id }), 4200)
   }, [])
+
+  // Serialize writes by document to avoid older snapshots overwriting newer
+  // annotations when several strokes arrive before an IndexedDB transaction
+  // commits. Surface quota/transaction failures to the user.
+  const queueAnnotations = useCallback((path: string, next: Annotation[]): void => {
+    const writes = annotationWritesRef.current
+    const prior = writes.get(path) ?? Promise.resolve()
+    const write = prior.catch(() => {}).then(() => db.saveAnnotations(path, next))
+    writes.set(path, write)
+    void write.catch((error) => {
+      console.error('[annotations] persistence failed', error)
+      toast('Notițele nu au fost salvate local. Salvează imediat o copie PDF.', 'error')
+    }).finally(() => {
+      if (writes.get(path) === write) writes.delete(path)
+    })
+  }, [toast])
 
   const applyTheme = useCallback((theme: Theme) => {
     const resolved =
@@ -298,7 +317,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       dispatch({ type: 'file/loading' })
       try {
         const doc = await loadDocument(file.data, { password })
+        const oldDocument = docRef.current
         docRef.current = doc
+        if (oldDocument && oldDocument !== doc) void oldDocument.cleanup()
         dataRef.current = file.data
 
         let outline: OutlineNode[] | null = null
@@ -318,6 +339,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         }
 
         const stored = (await db.getAnnotations(file.path)) as Annotation[] | undefined
+        annotationPathRef.current = file.path
+        annotationsRef.current = stored ?? []
         dispatch({
           type: 'file/opened',
           file: { path: file.path, name: file.name, size: file.size },
@@ -351,10 +374,15 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   )
 
   const openDialog = useCallback(async () => {
-    const file = await api.openDialog()
-    if (!file) return
-    await loadFile(file)
-  }, [loadFile])
+    try {
+      const file = await api.openDialog()
+      if (!file) return
+      await loadFile(file)
+    } catch (error) {
+      console.error('[open] document storage failed', error)
+      toast('Documentul nu a putut fi stocat local. Verifică spațiul disponibil sau permisiunile.', 'error')
+    }
+  }, [loadFile, toast])
 
   const openPath = useCallback(
     async (path: string, password?: string) => {
@@ -388,6 +416,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     void docRef.current?.cleanup()
     docRef.current = null
     dataRef.current = null
+    annotationPathRef.current = null
+    annotationsRef.current = []
     dispatch({ type: 'file/closed' })
   }, [])
 
@@ -413,27 +443,25 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const setTool = useCallback((tool: Tool) => dispatch({ type: 'tool/set', tool }), [])
   const setColor = useCallback((color: string) => dispatch({ type: 'color/set', color }), [])
 
-  const addAnnotation = useCallback(
-    (annotation: Annotation) => {
-      dispatch({ type: 'annotations/add', annotation })
-      if (state.file) void db.saveAnnotations(state.file.path, [...state.annotations, annotation])
-    },
-    [state.annotations, state.file]
-  )
+  const addAnnotation = useCallback((annotation: Annotation) => {
+    const next = [...annotationsRef.current, annotation]
+    annotationsRef.current = next
+    dispatch({ type: 'annotations/set', annotations: next })
+    if (annotationPathRef.current) queueAnnotations(annotationPathRef.current, next)
+  }, [queueAnnotations])
 
-  const removeAnnotation = useCallback(
-    (id: string) => {
-      const next = state.annotations.filter((item) => item.id !== id)
-      dispatch({ type: 'annotations/remove', id })
-      if (state.file) void db.saveAnnotations(state.file.path, next)
-    },
-    [state.annotations, state.file]
-  )
+  const removeAnnotation = useCallback((id: string) => {
+    const next = annotationsRef.current.filter((item) => item.id !== id)
+    annotationsRef.current = next
+    dispatch({ type: 'annotations/set', annotations: next })
+    if (annotationPathRef.current) queueAnnotations(annotationPathRef.current, next)
+  }, [queueAnnotations])
 
   const clearAnnotations = useCallback(() => {
+    annotationsRef.current = []
     dispatch({ type: 'annotations/set', annotations: [] })
-    if (state.file) void db.saveAnnotations(state.file.path, [])
-  }, [state.file])
+    if (annotationPathRef.current) queueAnnotations(annotationPathRef.current, [])
+  }, [queueAnnotations])
 
   const runSearch = useCallback(
     async (query: string) => {
@@ -526,8 +554,15 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
     dispatch({ type: 'saving/set', saving: true })
     try {
+      const pendingWrite = annotationWritesRef.current.get(file.path)
+      if (pendingWrite) {
+        try { await pendingWrite } catch {
+          toast('Salvarea adnotărilor locale a eșuat; se exportă copia din memorie.', 'error')
+        }
+      }
       const formValues = await collectFormValues()
-      const result = await exportAnnotatedPdf(data, state.annotations, { formValues })
+      const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
+      const result = await exportAnnotatedPdf(data, annotations, { formValues })
       const baseName = file.name.replace(/\.pdf$/i, '')
       const saved = await api.saveFile({
         defaultName: state.annotations.length ? `${baseName}-adnotat.pdf` : file.name,

@@ -84,7 +84,23 @@ export async function fileToRecord(file: File): Promise<OpenedFile> {
     size: file.size,
     data
   }
+  // Legacy v1.0.0 used 'web:<filename>'. Only migrate when bytes are identical;
+  // two different PDFs with the same name must never share annotations.
+  const legacyPath = `web:${file.name}`
+  const previous = await getFile(legacyPath)
   await putFile(record)
+  if (previous?.data.byteLength === data.byteLength) {
+    const oldDigest = await syntheticPath(previous.data)
+    if (oldDigest === record.path) {
+      try {
+        const { migrateLegacyMetadata } = await import('./db')
+        await migrateLegacyMetadata(legacyPath, record.path)
+      } catch (error) {
+        // The original legacy document/metadata is still present.
+        throw new Error('Documentul a fost păstrat, dar migrarea notițelor a eșuat: ' + String(error))
+      }
+    }
+  }
   return record
 }
 

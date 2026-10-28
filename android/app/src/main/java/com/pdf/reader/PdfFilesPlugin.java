@@ -3,6 +3,10 @@ package com.pdf.reader;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import android.util.Base64;
 
 import androidx.activity.result.ActivityResult;
@@ -22,6 +26,71 @@ import java.io.OutputStream;
  */
 @CapacitorPlugin(name = "PdfFiles")
 public class PdfFilesPlugin extends Plugin {
+    private static final int MAX_PDF_BYTES = 32 * 1024 * 1024;
+
+    private JSObject readIncoming(Uri uri) throws Exception {
+        if (uri == null) return null;
+        String name = "document.pdf";
+        try (Cursor cursor = getContext().getContentResolver().query(
+                uri, new String[] { OpenableColumns.DISPLAY_NAME }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (col >= 0 && cursor.getString(col) != null) name = cursor.getString(col);
+            }
+        } catch (Exception ignored) {
+            // Some providers do not offer display name metadata.
+        }
+        name = name.replace('/', '_').replace('\\', '_');
+        if (name.length() > 180) name = name.substring(name.length() - 180);
+        if (!name.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) name += ".pdf";
+        ByteArrayOutputStream data = new ByteArrayOutputStream();
+        try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
+            if (input == null) throw new java.io.IOException("Cannot open PDF stream");
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                if (data.size() + count > MAX_PDF_BYTES)
+                    throw new java.io.IOException("PDF too large for mobile import (32 MB limit)");
+                data.write(buffer, 0, count);
+            }
+        }
+        JSObject response = new JSObject();
+        response.put("available", true);
+        response.put("fileName", name);
+        response.put("base64", Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP));
+        return response;
+    }
+
+    @PluginMethod
+    public void getPendingPdf(PluginCall call) {
+        Uri uri = ((MainActivity) getActivity()).takePendingPdf();
+        try {
+            if (uri == null) {
+                JSObject result = new JSObject();
+                result.put("available", false);
+                call.resolve(result);
+                return;
+            }
+            call.resolve(readIncoming(uri));
+        } catch (Exception error) {
+            call.reject("Could not import the external PDF", error);
+        }
+    }
+
+    public void notifyIncomingPdf() {
+        Uri uri = ((MainActivity) getActivity()).takePendingPdf();
+        if (uri == null) return;
+        new Thread(() -> {
+            try {
+                JSObject incoming = readIncoming(uri);
+                if (incoming != null) notifyListeners("pdfOpened", incoming, true);
+            } catch (Exception error) {
+                JSObject failure = new JSObject();
+                failure.put("message", error.getMessage());
+                notifyListeners("pdfOpenError", failure, true);
+            }
+        }, "pdf-external-import").start();
+    }
 
     @PluginMethod
     public void savePdf(PluginCall call) {

@@ -98,6 +98,42 @@ async function main() {
   await win.loadURL(`http://127.0.0.1:${port}/`)
   await delay(1200)
 
+  // Simulate v1.0.0 stored PDF and annotations to verify migration without
+  // touching or deleting the original records.
+  await win.webContents.executeJavaScript(`(async () => {
+    const pdf = await (await fetch('/sample.pdf')).arrayBuffer()
+    const open = (name, version) => new Promise((resolve, reject) => {
+      const req = indexedDB.open(name, version)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (name === 'pdf-web-files' && !db.objectStoreNames.contains('files')) db.createObjectStore('files', {keyPath:'path'})
+        if (name === 'pdf') {
+          for (const store of ['recents','sessions','annotations']) {
+            if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, {keyPath:'path'})
+          }
+        }
+      }
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    const txWrite = (db, storeName, record) => new Promise((resolve,reject) => {
+      const tx = db.transaction(storeName, 'readwrite')
+      tx.objectStore(storeName).put(record)
+      tx.oncomplete = resolve
+      tx.onerror = () => reject(tx.error)
+    })
+    const files = await open('pdf-web-files', 1)
+    await txWrite(files, 'files', {path:'web:pdf-sample.pdf',name:'pdf-sample.pdf',size:pdf.byteLength,data:pdf})
+    files.close()
+    const meta = await open('pdf',1)
+    await txWrite(meta, 'annotations', {path:'web:pdf-sample.pdf',updatedAt:1,annotations:[{
+      id:'legacy-test-note',type:'note',page:0,rect:[40,500,65,525],
+      color:'#b4532a',opacity:1,createdAt:1,comment:'legacy preserved'
+    }]})
+    await txWrite(meta,'sessions',{path:'web:pdf-sample.pdf',page:4,zoom:1,zoomMode:'custom',scrollTop:0,updatedAt:1})
+    meta.close()
+  })()`, true)
+
   // Exactly what a user does when dropping a PDF onto the window.
   const dropResult = await win.webContents.executeJavaScript(
     `(async () => {
@@ -113,6 +149,37 @@ async function main() {
     true
   )
   console.log(`[qa-web] document livrat prin drop: ${dropResult.bytes} bytes`)
+  await delay(600)
+  const legacyMigration = await win.webContents.executeJavaScript(`(async () => {
+    const dataDb = await new Promise((resolve,reject) => {
+      const req = indexedDB.open('pdf-web-files')
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    const newKey = await new Promise((resolve,reject) => {
+      const req = dataDb.transaction('files').objectStore('files').getAllKeys()
+      req.onsuccess = () => resolve(req.result.find(k => k.startsWith('web:sha256:')))
+      req.onerror = () => reject(req.error)
+    })
+    dataDb.close()
+    const db = await new Promise((resolve,reject) => {
+      const req = indexedDB.open('pdf')
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    const read = (storeName,key) => new Promise((resolve,reject) => {
+      const req=db.transaction(storeName).objectStore(storeName).get(key)
+      req.onsuccess=()=>resolve(req.result)
+      req.onerror=()=>reject(req.error)
+    })
+    const notes=await read('annotations',newKey)
+    const session=await read('sessions',newKey)
+    const original=await read('annotations','web:pdf-sample.pdf')
+    db.close()
+    return Boolean(notes?.annotations?.[0]?.comment === 'legacy preserved' &&
+      session?.page===4 && original?.annotations?.[0]?.comment === 'legacy preserved')
+  })()`, true)
+  console.log('[qa-web] migrare fără pierderi:', legacyMigration)
 
   // Hosted Xvfb runners may take longer to paint. Check actual text, not a
   // fixed short sleep that produces false negatives on overloaded runners.
@@ -202,7 +269,31 @@ async function main() {
   )
   console.log('[qa-web] fișier trunchiat tratat:', invalidHandled)
 
-  const ok = state.canvases > 0 && state.textLayers > 0 && state.total !== '—' && uniqueRecents === 2 && invalidHandled
+  // Regression: a long document must not keep every visited canvas mounted.
+  const longPdf = await PDFDocument.create()
+  for (let i = 0; i < 140; i++) longPdf.addPage([300, 400])
+  const longBase64 = Buffer.from(await longPdf.save()).toString('base64')
+  await win.webContents.executeJavaScript(`(() => {
+    const data=atob('${longBase64}')
+    const transfer=new DataTransfer()
+    transfer.items.add(new File([Uint8Array.from(data, ch=>ch.charCodeAt(0))], 'long.pdf', {type:'application/pdf'}))
+    window.dispatchEvent(new DragEvent('drop',{dataTransfer:transfer,bubbles:true,cancelable:true}))
+  })()`, true)
+  await delay(1500)
+  await win.webContents.executeJavaScript(`(() => {
+    const scroll=document.querySelector('.pagearea__scroll')
+    if(scroll) scroll.scrollTop=scroll.scrollHeight
+  })()`, true)
+  await delay(1300)
+  const longState = await win.webContents.executeJavaScript(`(() => ({
+    slots:document.querySelectorAll('[data-slot]').length,
+    canvases:document.querySelectorAll('.page__canvas').length
+  }))()`, true)
+  console.log('[qa-web] pagini / canvas active:', longState)
+
+  const ok = state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
+    uniqueRecents === 2 && invalidHandled && legacyMigration &&
+    longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20
   console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')
 
   win.destroy()
