@@ -1,6 +1,6 @@
 {
   "name": "pdf-reader",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "PDF — a calm, fast PDF reader for desktop",
   "main": "./out/main/index.js",
   "author": {
@@ -30,6 +30,8 @@
     "test:web": "node scripts/make-sample-pdf.mjs && npm run build:web && electron scripts/qa-web.cjs"
   },
   "dependencies": {
+    "@expo-google-fonts/noto-sans": "^0.4.2",
+    "@pdf-lib/fontkit": "^1.1.1",
     "electron-updater": "6.8.11",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.4.299",

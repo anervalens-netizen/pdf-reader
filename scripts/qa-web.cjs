@@ -15,7 +15,7 @@ const { app, BrowserWindow } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
-const { PDFDocument } = require('pdf-lib')
+const { PDFDocument, PDFDict, PDFName, PDFRawStream } = require('pdf-lib')
 
 const root = path.resolve(__dirname, '..')
 const dist = path.join(root, 'dist-web')
@@ -502,7 +502,74 @@ async function main() {
   const racePrevented = await win.webContents.executeJavaScript('window.__racePrinted === false', true)
   console.log('[qa-web] schimbare document anulează imprimarea:', racePrevented)
 
-  const ok = mergePickerImmediate && saveCopyWorked && pageToolsWorked && printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
+  // AcroForm Unicode regression through the full renderer path. The user
+  // types in a real PDF.js widget and presses the standard Save Copy button.
+  const unicodeSource = await PDFDocument.create()
+  const unicodePage = unicodeSource.addPage([595, 842])
+  const unicodeField = unicodeSource.getForm().createTextField('client')
+  unicodeField.addToPage(unicodePage, { x: 55, y: 700, width: 290, height: 28 })
+  const unicodeBase64 = Buffer.from(await unicodeSource.save()).toString('base64')
+  await win.webContents.executeJavaScript(`(() => {
+    const bytes=Uint8Array.from(atob('${unicodeBase64}'), ch => ch.charCodeAt(0))
+    const input=new DataTransfer()
+    input.items.add(new File([bytes],'unicode-form.pdf',{type:'application/pdf'}))
+    window.dispatchEvent(new DragEvent('drop',{dataTransfer:input,bubbles:true,cancelable:true}))
+  })()`, true)
+  let unicodeInput = false
+  for (let attempt=0; attempt<45; attempt++) {
+    unicodeInput = await win.webContents.executeJavaScript(
+      "Boolean(document.querySelector('.annotationLayer input[type=text]'))", true
+    )
+    if (unicodeInput) break
+    await delay(250)
+  }
+  await win.webContents.executeJavaScript(`(() => {
+    // Reloads in the preceding regressions reset browser test hooks.
+    // Restore a writable Save As picker before exercising the real UI.
+    window.showSaveFilePicker = async (options) => ({
+      name: options.suggestedName,
+      createWritable: async () => ({
+        write: async (blob) => { window.__pagesSaved = [...new Uint8Array(await blob.arrayBuffer())] },
+        close: async () => { window.__pagesSaveDone = true }
+      })
+    })
+    const node=document.querySelector('.annotationLayer input[type=text]')
+    if (!node) return
+    node.focus()
+    const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set
+    setter.call(node,'Ștefan Țucă ăâîșț')
+    node.dispatchEvent(new Event('input',{bubbles:true}))
+    node.dispatchEvent(new Event('change',{bubbles:true}))
+    node.blur()
+    window.__pagesSaved=null
+    window.__pagesSaveDone=false
+    document.querySelector('button[aria-label="Salvează o copie"]')?.click()
+  })()`, true)
+  let unicodeSavedBytes = null
+  for (let attempt=0; attempt<75; attempt++) {
+    unicodeSavedBytes=await win.webContents.executeJavaScript(
+      'window.__pagesSaveDone ? window.__pagesSaved : null', true
+    )
+    if (unicodeSavedBytes) break
+    await delay(200)
+  }
+  let unicodeEndToEnd=false
+  if (unicodeSavedBytes) {
+    const pdf=await PDFDocument.load(Uint8Array.from(unicodeSavedBytes))
+    const field=pdf.getForm().getTextField('client')
+    const normal=field.acroField.getWidgets()[0].getAppearances()?.normal
+    const stream=normal ? pdf.context.lookup(normal, PDFRawStream) : null
+    const fonts=stream?.dict.lookup(PDFName.of('Resources'), PDFDict)?.lookup(PDFName.of('Font'), PDFDict)
+    const embedded=fonts?.entries().some(([,reference]) =>
+      pdf.context.lookup(reference, PDFDict).get(PDFName.of('Subtype'))?.toString()==='/Type0'
+    )
+    unicodeEndToEnd=field.getText()==='Ștefan Țucă ăâîșț' && Boolean(embedded)
+  }
+  console.log('[qa-web] Unicode widget /V și aspect font Type0:', {
+    unicodeInput, saved: Boolean(unicodeSavedBytes), unicodeEndToEnd
+  })
+
+  const ok = unicodeEndToEnd && mergePickerImmediate && saveCopyWorked && pageToolsWorked && printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
     uniqueRecents === 2 && invalidHandled && legacyMigration && emptyMigrationPreserved &&
     longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20 && racePrevented
   console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')

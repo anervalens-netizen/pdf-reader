@@ -1,4 +1,5 @@
 import { PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, rgb, BlendMode, LineCapStyle, type PDFPage } from 'pdf-lib'
+import fontkit from '@pdf-lib/fontkit'
 import type { PdfQuad, PdfRect } from './geometry'
 
 export type AnnotationType = 'highlight' | 'underline' | 'note' | 'ink' | 'signature'
@@ -137,6 +138,8 @@ async function drawSignature(
 export interface ExportOptions {
   /** Form field values captured from the live PDF.js document. */
   formValues?: { name: string; type: string; value: string | boolean }[]
+  /** Font bytes for embedding Unicode widget appearance glyphs. */
+  unicodeFontBytes?: Uint8Array
 }
 
 export interface ExportResult {
@@ -250,6 +253,20 @@ export async function exportAnnotatedPdf(
       }
     } catch (error) {
       warnings.push(`Valorile formularului nu au putut fi aplicate: ${String(error)}`)
+    }
+  }
+
+  // WinAnsi Helvetica cannot draw Romanian diacritics in widget appearances.
+  // Regenerate with an embedded Unicode font when these characters occur.
+  if (options.unicodeFontBytes?.byteLength && options.formValues?.some(
+    (field) => typeof field.value === 'string' && /[^\u0000-\u007f]/u.test(field.value)
+  )) {
+    try {
+      pdfDoc.registerFontkit(fontkit)
+      const unicodeFont = await pdfDoc.embedFont(options.unicodeFontBytes, { subset: true })
+      pdfDoc.getForm().updateFieldAppearances(unicodeFont)
+    } catch (error) {
+      warnings.push('Fontul Unicode nu a putut genera aspectul formularului: ' + String(error))
     }
   }
 

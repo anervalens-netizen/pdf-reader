@@ -124,6 +124,14 @@ build/        logo-ul vectorial și icoanele rasterizate
 Electron 45 · React 19 · TypeScript 7 · Vite 8 · PDF.js 6.4 · pdf-lib 1.17 ·
 Capacitor 8 · IndexedDB
 
+## Versiunea 1.1.1 — formular PDF Unicode (remediere Codex)
+
+- Exportul câmpurilor AcroForm cu caractere românești `ăâîșț` folosește un font Unicode Noto Sans încorporat în aspectul vizual al câmpului; datele sunt păstrate și în `/V`.
+- Fontul este disponibil offline în aplicația desktop, Android și PWA (nu se descarcă la export). Este folosit doar când există text non-ASCII.
+- Fallback-ul din 1.1.0 rămâne activ dacă fontul nu poate genera aspectul; afișează avertizarea, fără pierdere de text.
+- Teste: verifică resursele Type0 ale aparenței PDF și un flux real în browser cu completare formular, Save Copy și redeschiderea rezultatului.
+- Dependențe: `@pdf-lib/fontkit` (MIT) și Noto Sans (SIL OFL 1.1); licența fontului este inclusă în `licenses/NotoSans-OFL-1.1.txt`.
+
 ## Versiunea 1.1.0 — operații PDF de bază
 
 - Rotire cu 90° a paginii curente.

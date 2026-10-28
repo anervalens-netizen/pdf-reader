@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PDFDocument, PDFDict, PDFHexString, PDFName } from 'pdf-lib'
+import { PDFDocument, PDFDict, PDFHexString, PDFName, PDFRawStream } from 'pdf-lib'
 import { deflateSync } from 'node:zlib'
 import { exportAnnotatedPdf } from '../src/renderer/src/lib/annotations.ts'
 
@@ -198,14 +198,30 @@ if (!savedForm.getCheckBox('approved').isChecked()) failures.push('checkbox lost
 if (savedForm.getRadioGroup('choice').getSelected() !== 'B') failures.push('radio selection lost')
 if (savedForm.getDropdown('category').getSelected()[0] !== 'Private') failures.push('dropdown selection lost')
 
-// Romanian diacritics must not cause an export exception or lose field /V.
-// An appearance-warning is expected until a bundled Unicode font is added.
+// Unicode output must contain an actual embedded font in widget appearance,
+// not merely store correct /V with NeedAppearances.
+const unicodeBytes = readFileSync(resolve(root, 'node_modules/@expo-google-fonts/noto-sans/400Regular/NotoSans_400Regular.ttf'))
 const unicodeForm = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
+  formValues: [{ name: 'client', type: 'Tx', value: 'Ștefan Țucă ăâîșț' }],
+  unicodeFontBytes: unicodeBytes
+})
+if (unicodeForm.warnings.length) failures.push('Unicode form warnings: ' + unicodeForm.warnings.join(' | '))
+const loadedUnicode = await PDFDocument.load(unicodeForm.data)
+const unicodeField = loadedUnicode.getForm().getTextField('client')
+if (unicodeField.getText() !== 'Ștefan Țucă ăâîșț') failures.push('Unicode form field lost')
+const unicodeAppearance = unicodeField.acroField.getWidgets()[0].getAppearances()?.normal
+const appearanceStream = unicodeAppearance ? loadedUnicode.context.lookup(unicodeAppearance, PDFRawStream) : null
+const resourceDict = appearanceStream?.dict.lookup(PDFName.of('Resources'), PDFDict)
+const fontResources = resourceDict?.lookup(PDFName.of('Font'), PDFDict)
+const embeddedFonts = fontResources?.entries().map(([,ref]) => loadedUnicode.context.lookup(ref, PDFDict)) ?? []
+const hasUnicodeAppearance = embeddedFonts.some((font) => font.get(PDFName.of('Subtype'))?.toString() === '/Type0')
+if (!hasUnicodeAppearance) failures.push('Unicode appearance lacks embedded Type0 font')
+console.log('unicode form value + embedded Type0 appearance:', hasUnicodeAppearance)
+// Preserve the fallback on systems without font bytes.
+const noFontExport = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
   formValues: [{ name: 'client', type: 'Tx', value: 'Ștefan Țucă' }]
 })
-const unicodeValue = (await PDFDocument.load(unicodeForm.data)).getForm().getTextField('client').getText()
-if (unicodeValue !== 'Ștefan Țucă') failures.push('Unicode form field lost')
-if (!unicodeForm.warnings.some((warning) => warning.includes('diacritice'))) failures.push('Unicode visual appearance warning missing')
+if (!noFontExport.warnings.some((warning) => warning.includes('diacritice'))) failures.push('missing-font fallback warning absent')
 
 // Round-trip: the exported file must be re-loadable and re-savable.
 const resaved = await reloaded.save()
