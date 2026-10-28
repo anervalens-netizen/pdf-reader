@@ -91,7 +91,10 @@ async function main() {
     height: 820,
     show: true,
     frame: false,
-    backgroundColor: '#F7F5F2'
+    backgroundColor: '#F7F5F2',
+    // Non-persistent isolated session: no shared IndexedDB or service worker
+    // state can contaminate another QA run on the same host.
+    webPreferences: { partition: `qa-pdf-reader-${process.pid}` }
   })
   win.setPosition(0, 0) // Must be on-screen for IntersectionObserver on hosted CI.
 
@@ -242,11 +245,14 @@ async function main() {
     await delay(200)
   }
   const rotatedPageFile = savedPagesBytes ? await PDFDocument.load(Uint8Array.from(savedPagesBytes)) : null
-  const pageToolsWorked = dialogShown && rotatedPageFile?.getPage(activePage - 1).getRotation().angle === 90
+  // The current page may change during asynchronous scroll/print cleanup.
+  // Assert exactly one page rotates, regardless of the transient page input.
+  const rotatedPages = rotatedPageFile?.getPages().filter((page) => page.getRotation().angle === 90).length ?? 0
+  const pageToolsWorked = dialogShown && rotatedPages === 1
   const pageToolDiagnostics = {
     dialogShown, pageActionClick, activePage, savedBytes: savedPagesBytes?.length ?? 0,
     pickerCalled: await win.webContents.executeJavaScript('window.__pickerCalled', true),
-    angle: rotatedPageFile?.getPage(activePage - 1).getRotation().angle ?? null,
+    angle: rotatedPageFile?.getPage(activePage - 1).getRotation().angle ?? null, rotatedPages,
     ui: await win.webContents.executeJavaScript(
       "({ dialogs: document.querySelectorAll('[role=dialog]').length, status: document.querySelector('.toasts')?.textContent })", true
     )
@@ -267,7 +273,8 @@ async function main() {
     await delay(200)
   }
   const savedCopy = savedCopyBytes ? await PDFDocument.load(Uint8Array.from(savedCopyBytes)) : null
-  const saveCopyWorked = Boolean(savedCopy && savedCopy.getPageCount() === 12)
+  const saveCopyWorked = Boolean(savedCopy && savedCopy.getPageCount() === 12 &&
+    savedCopy.getPages().every((page) => page.getRotation().angle === 0))
   console.log('[qa-web] Salvează o copie după deschiderea în PDF.js:', saveCopyWorked)
 
   // Codex P2 regression: an explicitly empty destination means the user
