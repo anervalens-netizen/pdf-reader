@@ -1,4 +1,4 @@
-import { PDFDocument, PDFHexString, rgb, BlendMode, LineCapStyle, type PDFPage } from 'pdf-lib'
+import { PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, rgb, BlendMode, LineCapStyle, type PDFPage } from 'pdf-lib'
 import type { PdfQuad, PdfRect } from './geometry'
 
 export type AnnotationType = 'highlight' | 'underline' | 'note' | 'ink' | 'signature'
@@ -253,7 +253,22 @@ export async function exportAnnotatedPdf(
     }
   }
 
-  const bytes = await pdfDoc.save()
+  let bytes: Uint8Array
+  try {
+    bytes = await pdfDoc.save()
+  } catch (error) {
+    // pdf-lib's built-in Helvetica cannot draw Romanian diacritics in form
+    // appearances. Keep the correct Unicode /V value instead of failing the
+    // entire export. Readers can regenerate visual appearances when opened.
+    if (!String(error).includes('WinAnsi cannot encode')) throw error
+    const formRef = pdfDoc.catalog.get(PDFName.of('AcroForm'))
+    if (formRef) {
+      const formDict = pdfDoc.context.lookup(formRef, PDFDict)
+      formDict.set(PDFName.of('NeedAppearances'), PDFBool.True)
+    }
+    bytes = await pdfDoc.save({ updateFieldAppearances: false })
+    warnings.push('Formularul conține diacritice: valorile sunt păstrate, dar aspectul câmpurilor trebuie verificat în cititorul PDF.')
+  }
   return {
     data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
     warnings

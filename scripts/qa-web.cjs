@@ -89,11 +89,11 @@ async function main() {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
-    show: false,
+    show: true,
     frame: false,
     backgroundColor: '#F7F5F2'
   })
-  win.setPosition(-4000, -4000)
+  win.setPosition(0, 0) // Must be on-screen for IntersectionObserver on hosted CI.
 
   await win.loadURL(`http://127.0.0.1:${port}/`)
   await delay(1200)
@@ -114,8 +114,15 @@ async function main() {
   )
   console.log(`[qa-web] document livrat prin drop: ${dropResult.bytes} bytes`)
 
-  // Give PDF.js time to parse and paint the first pages.
-  await delay(3500)
+  // Hosted Xvfb runners may take longer to paint. Check actual text, not a
+  // fixed short sleep that produces false negatives on overloaded runners.
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const rendered = await win.webContents.executeJavaScript(
+      "document.querySelectorAll('.textLayer span').length", true
+    )
+    if (rendered > 0) break
+    await delay(500)
+  }
 
   const state = await win.webContents.executeJavaScript(
     `(() => {
@@ -139,8 +146,14 @@ async function main() {
 
   console.log('[qa-web] stare:', JSON.stringify(state))
 
-  const image = await win.webContents.capturePage()
-  fs.writeFileSync(path.join(outDir, '01-web-reading.png'), image.toPNG())
+  try {
+    const image = await win.webContents.capturePage()
+    fs.writeFileSync(path.join(outDir, '01-web-reading.png'), image.toPNG())
+  } catch (error) {
+    // An unavailable GPU/compositor on a CI runner does not invalidate the
+    // DOM, PDF.js rendering, IndexedDB or error-state assertions below.
+    console.warn('[qa-web] screenshot unavailable:', String(error))
+  }
 
   // The reading session and the mirrored file must survive a reload.
   await win.reload()

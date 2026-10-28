@@ -198,6 +198,15 @@ if (!savedForm.getCheckBox('approved').isChecked()) failures.push('checkbox lost
 if (savedForm.getRadioGroup('choice').getSelected() !== 'B') failures.push('radio selection lost')
 if (savedForm.getDropdown('category').getSelected()[0] !== 'Private') failures.push('dropdown selection lost')
 
+// Romanian diacritics must not cause an export exception or lose field /V.
+// An appearance-warning is expected until a bundled Unicode font is added.
+const unicodeForm = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
+  formValues: [{ name: 'client', type: 'Tx', value: 'Ștefan Țucă' }]
+})
+const unicodeValue = (await PDFDocument.load(unicodeForm.data)).getForm().getTextField('client').getText()
+if (unicodeValue !== 'Ștefan Țucă') failures.push('Unicode form field lost')
+if (!unicodeForm.warnings.some((warning) => warning.includes('diacritice'))) failures.push('Unicode visual appearance warning missing')
+
 // Round-trip: the exported file must be re-loadable and re-savable.
 const resaved = await reloaded.save()
 if (resaved.length === 0) failures.push('round-trip save produced an empty file')
