@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, PDFDict, PDFHexString, PDFName } from 'pdf-lib'
 import { deflateSync } from 'node:zlib'
 import { exportAnnotatedPdf } from '../src/renderer/src/lib/annotations.ts'
 
@@ -122,7 +122,7 @@ const annotations = [
     opacity: 0.92,
     createdAt: Date.now(),
     rect: [500, 700, 522, 722],
-    comment: 'De verificat'
+    comment: 'De verificat în întregime: documentul conține informații importante, șir lung cu diacritice ăâîșț.'
   },
   {
     id: 'a4',
@@ -146,9 +146,7 @@ const annotations = [
   }
 ]
 
-const result = await exportAnnotatedPdf(originalBuffer, annotations, {
-  formValues: [{ name: 'missing', type: 'text', value: 'ignored' }]
-})
+const result = await exportAnnotatedPdf(originalBuffer, annotations)
 
 const failures = []
 if (result.warnings.length) failures.push(`warnings: ${result.warnings.join(' | ')}`)
@@ -156,6 +154,58 @@ if (result.data.byteLength <= original.length) failures.push('exported file is n
 
 const reloaded = await PDFDocument.load(result.data, { updateMetadata: false })
 if (reloaded.getPageCount() !== 12) failures.push(`page count changed: ${reloaded.getPageCount()}`)
+
+// Full Unicode sticky-note content must survive a PDF roundtrip.
+const pageAnnotations = reloaded.getPage(0).node.Annots()
+const noteContents = []
+if (pageAnnotations) {
+  for (let index = 0; index < pageAnnotations.size(); index++) {
+    const dict = reloaded.context.lookup(pageAnnotations.get(index), PDFDict)
+    const text = dict.get(PDFName.of('Contents'))
+    if (text instanceof PDFHexString) noteContents.push(text.decodeText())
+  }
+}
+if (!noteContents.some((text) => text.includes('ăâîșț'))) failures.push('Unicode note comment was lost')
+
+// Real AcroForm field types returned by PDF.js must map to writable pdf-lib
+// fields; merely generating a PDF is not proof that filled values survive.
+const formDoc = await PDFDocument.create()
+const formPage = formDoc.addPage([595, 842])
+const form = formDoc.getForm()
+const textField = form.createTextField('client')
+textField.addToPage(formPage, { x: 50, y: 700, width: 200, height: 24 })
+const checkbox = form.createCheckBox('approved')
+checkbox.addToPage(formPage, { x: 50, y: 660, width: 24, height: 24 })
+const radio = form.createRadioGroup('choice')
+radio.addOptionToPage('A', formPage, { x: 50, y: 620, width: 24, height: 24 })
+radio.addOptionToPage('B', formPage, { x: 100, y: 620, width: 24, height: 24 })
+const dropdown = form.createDropdown('category')
+dropdown.addOptions(['Public', 'Private'])
+dropdown.addToPage(formPage, { x: 50, y: 580, width: 200, height: 24 })
+const originalForm = await formDoc.save()
+const formExport = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
+  formValues: [
+    { name: 'client', type: 'Tx', value: 'Exemplu' },
+    { name: 'approved', type: 'Btn', value: true },
+    { name: 'choice', type: 'Btn', value: 'B' },
+    { name: 'category', type: 'Ch', value: 'Private' }
+  ]
+})
+if (formExport.warnings.length) failures.push('form warnings: ' + formExport.warnings.join(' | '))
+const savedForm = (await PDFDocument.load(formExport.data)).getForm()
+if (savedForm.getTextField('client').getText() !== 'Exemplu') failures.push('text field lost')
+if (!savedForm.getCheckBox('approved').isChecked()) failures.push('checkbox lost')
+if (savedForm.getRadioGroup('choice').getSelected() !== 'B') failures.push('radio selection lost')
+if (savedForm.getDropdown('category').getSelected()[0] !== 'Private') failures.push('dropdown selection lost')
+
+// Romanian diacritics must not cause an export exception or lose field /V.
+// An appearance-warning is expected until a bundled Unicode font is added.
+const unicodeForm = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
+  formValues: [{ name: 'client', type: 'Tx', value: 'Ștefan Țucă' }]
+})
+const unicodeValue = (await PDFDocument.load(unicodeForm.data)).getForm().getTextField('client').getText()
+if (unicodeValue !== 'Ștefan Țucă') failures.push('Unicode form field lost')
+if (!unicodeForm.warnings.some((warning) => warning.includes('diacritice'))) failures.push('Unicode visual appearance warning missing')
 
 // Round-trip: the exported file must be re-loadable and re-savable.
 const resaved = await reloaded.save()

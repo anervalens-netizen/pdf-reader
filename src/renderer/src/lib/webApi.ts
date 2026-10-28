@@ -1,5 +1,6 @@
 import type { AppInfo, OpenedFile, PdfApi, SaveResult } from '../../../shared/api'
 import { getFile, putFile } from './webFiles'
+import { isNativeShell, savePdfOnAndroid } from './native'
 
 declare const __APP_VERSION__: string
 
@@ -20,8 +21,12 @@ interface SavePicker {
 }
 
 /** Synthetic key used in place of a real file system path. */
-function syntheticPath(name: string): string {
-  return `web:${name}`
+async function syntheticPath(data: ArrayBuffer): Promise<string> {
+  // Content identity prevents unrelated PDFs with the same filename overwriting
+  // each other, including their session data and annotations.
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `web:sha256:${hash}`
 }
 
 function baseName(path: string): string {
@@ -74,7 +79,7 @@ function downloadBlob(blob: Blob, fileName: string): void {
 export async function fileToRecord(file: File): Promise<OpenedFile> {
   const data = await file.arrayBuffer()
   const record: OpenedFile = {
-    path: syntheticPath(file.name),
+    path: await syntheticPath(data),
     name: file.name,
     size: file.size,
     data
@@ -102,6 +107,7 @@ export const webApi: PdfApi = {
   },
 
   platform: () => 'unknown',
+  rendererReady: () => { /* browser has no OS launch queue */ },
 
   async openDialog(): Promise<OpenedFile | null> {
     const file = await pickFile()
@@ -116,6 +122,15 @@ export const webApi: PdfApi = {
   },
 
   async saveFile(options: { defaultName: string; data: ArrayBuffer; title?: string }): Promise<SaveResult> {
+    if (isNativeShell()) {
+      // WebView downloads are unreliable on Android; use the system's SAF
+      // Create Document picker instead of reporting a fictitious success.
+      try {
+        return await savePdfOnAndroid(options.defaultName, options.data)
+      } catch (error) {
+        return { canceled: false, error: `Salvarea Android a eșuat: ${String(error)}` }
+      }
+    }
     const blob = new Blob([options.data], { type: 'application/pdf' })
     const picker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker
 

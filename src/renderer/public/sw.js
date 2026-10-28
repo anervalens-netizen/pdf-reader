@@ -6,7 +6,7 @@
  * served cache-first and stored on first use. That makes the reader usable
  * offline once it has been opened at least once.
  */
-const CACHE = 'pdf-shell-v1'
+const CACHE = 'pdf-shell-v1.0.1'
 const SHELL = ['./', './index.html', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -34,6 +34,19 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
+
+  // Navigations are network-first so users see updated releases promptly;
+  // offline use still falls back to the cached application shell.
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).then((response) => {
+      if (response.ok) {
+        const copy = response.clone()
+        void caches.open(CACHE).then((cache) => cache.put(request, copy))
+      }
+      return response
+    }).catch(async () => (await caches.match(request)) ?? (await caches.match('./index.html')) ?? Response.error()))
+    return
+  }
 
   event.respondWith(
     caches.match(request).then((cached) => {

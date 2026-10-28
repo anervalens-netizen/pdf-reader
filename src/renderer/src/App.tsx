@@ -114,9 +114,13 @@ export default function App(): JSX.Element {
 
   // --- Files opened from the OS --------------------------------------------
   useEffect(() => {
-    return api.onFileOpened(({ path }) => {
+    const unsubscribe = api.onFileOpened(({ path }) => {
       void openPath(path)
     })
+    // The main process must not send launch-argument files until this handler
+    // exists; did-finish-load occurs before React useEffect registration.
+    api.rendererReady()
+    return unsubscribe
   }, [openPath])
 
   // --- Drag & drop ----------------------------------------------------------

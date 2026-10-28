@@ -36,6 +36,11 @@ jobs:
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "platforms;android-36" > /dev/null || true
 
+      - name: Verificare tipuri si export
+        run: |
+          npm run typecheck
+          npm run test:export
+
       - name: Build web + sincronizează shell-ul Android
         run: |
           npm run build:web

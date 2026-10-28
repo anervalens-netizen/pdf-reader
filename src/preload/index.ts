@@ -21,6 +21,7 @@ const api: PdfApi = {
     ipcRenderer.on('pdf:menu-action', listener)
     return () => ipcRenderer.removeListener('pdf:menu-action', listener)
   },
+  rendererReady: (): void => ipcRenderer.send('pdf:renderer-ready'),
   onFileOpened: (handler: (payload: { path: string; name: string }) => void): (() => void) => {
     const listener = (_event: unknown, payload: { path: string; name: string }): void => handler(payload)
     ipcRenderer.on('pdf:file-opened', listener)

@@ -1,5 +1,5 @@
 import { app, dialog, ipcMain, shell } from 'electron'
-import { basename, dirname } from 'node:path'
+import { basename, dirname, extname } from 'node:path'
 import { getMainWindow } from './window'
 import { readBinary, writeBinary } from './store'
 import type { OpenedFile, SaveResult } from '../shared/api'
@@ -34,7 +34,9 @@ export function registerIpcHandlers(): void {
     return openFileAt(result.filePaths[0])
   })
 
-  ipcMain.handle('pdf:read-file', async (_event, path: string): Promise<OpenedFile | null> => {
+  ipcMain.handle('pdf:read-file', async (event, path: string): Promise<OpenedFile | null> => {
+    // A compromised renderer must not be able to read arbitrary non-PDF files.
+    if (event.sender !== getMainWindow()?.webContents || typeof path !== 'string' || extname(path).toLowerCase() !== '.pdf') return null
     return openFileAt(path)
   })
 
@@ -59,7 +61,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'pdf:save-to',
-    async (_event, payload: { path: string; data: ArrayBuffer }): Promise<SaveResult> => {
+    async (event, payload: { path: string; data: ArrayBuffer }): Promise<SaveResult> => {
+      // Direct writes are reserved for explicit local QA capture, not normal PDFs.
+      if (!process.env.PDF_CAPTURE_DIR || event.sender !== getMainWindow()?.webContents || extname(payload.path).toLowerCase() !== '.pdf') {
+        return { canceled: false, error: 'Salvarea directă nu este disponibilă.' }
+      }
       try {
         await writeBinary(payload.path, payload.data)
         return { path: payload.path, canceled: false }

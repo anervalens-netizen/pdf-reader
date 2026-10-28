@@ -539,13 +539,16 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         toast('Salvarea a eșuat.', 'error')
         return
       }
-      toast(
-        state.annotations.length
-          ? `Salvat cu ${state.annotations.length} adnotări.`
-          : 'Copie salvată.',
-        'success'
-      )
-      if (saved.path) await db.touchRecent({ path: saved.path, name: file.name, size: result.data.byteLength })
+      if (result.warnings.length) {
+        console.warn('[save] export warnings', result.warnings)
+        toast(`Copie salvată, dar ${result.warnings.length} element(e) necesită verificare.`, 'error')
+      } else {
+        toast(state.annotations.length ? `Salvat cu ${state.annotations.length} adnotări.` : 'Copie salvată.', 'success')
+      }
+      // Browser/Android save locations are not reusable IndexedDB paths.
+      if (saved.path && api.platform() !== 'unknown') {
+        await db.touchRecent({ path: saved.path, name: saved.path.split(/[\\/]/).pop() ?? file.name, size: result.data.byteLength })
+      }
       await refreshRecents()
     } catch (error) {
       console.error('[save] failed', error)

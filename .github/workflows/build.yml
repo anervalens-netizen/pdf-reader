@@ -29,6 +29,9 @@ jobs:
       - name: Verificare tipuri
         run: npm run typecheck
 
+      - name: Test export PDF si formulare
+        run: npm run test:export
+
       - name: Build instalator
         run: npm run dist:win
         env:
@@ -65,6 +68,14 @@ jobs:
 
       - name: Verificare tipuri
         run: npm run typecheck
+
+      - name: Test export PDF si formulare
+        run: npm run test:export
+
+      - name: Test UI Web / documente corupte / nume duplicate
+        run: |
+          npm run build:web
+          xvfb-run -a npx electron --no-sandbox scripts/qa-web.cjs
 
       - name: Build pachete
         run: npm run dist:linux

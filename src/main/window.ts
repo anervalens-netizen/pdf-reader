@@ -37,7 +37,7 @@ export function createWindow(state: WindowState): BrowserWindow {
     trafficLightPosition: isMac ? { x: 14, y: 14 } : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,

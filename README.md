@@ -124,6 +124,16 @@ build/        logo-ul vectorial și icoanele rasterizate
 Electron 45 · React 19 · TypeScript 7 · Vite 8 · PDF.js 6.4 · pdf-lib 1.17 ·
 Capacitor 8 · IndexedDB
 
+## Versiunea 1.0.1 — corecții și verificări
+
+- Android: salvarea PDF folosește selectorul nativ de documente (SAF), fără permisiuni largi de stocare.
+- Web/Android: identitate SHA-256 pentru documente, pentru a evita coliziunea dintre fișiere cu același nume. Datele anterioare din IndexedDB rămân accesibile.
+- Export: valorile de formular AcroForm (text, checkbox, radio, dropdown) sunt mapate corect între PDF.js și pdf-lib; comentariile se păstrează integral în adnotări PDF de tip Text, inclusiv cu diacritice.
+- Desktop: sandbox Electron activ și deschiderea fișierelor din sistem sincronizată cu pornirea rendererului.
+- PWA: navigațiile folosesc network-first cu fallback offline. Bara de instrumente mobilă are scroll fără indicator deranjant.
+- Teste: generare automată PDF de probă, verificări de export și formular, UI Web/Electron și regresii.
+- PDF deteriorat: explicație explicită și recomandare de re-descărcare. Aplicația nu pretinde că poate repara orice fișier incomplet.
+
 ## Limitări cunoscute
 
 - **Tipărirea** folosește pipeline-ul de print al browserului: foaia de stil de print ascunde

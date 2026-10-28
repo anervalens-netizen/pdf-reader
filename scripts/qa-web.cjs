@@ -15,6 +15,7 @@ const { app, BrowserWindow } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
+const { PDFDocument } = require('pdf-lib')
 
 const root = path.resolve(__dirname, '..')
 const dist = path.join(root, 'dist-web')
@@ -88,11 +89,11 @@ async function main() {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
-    show: false,
+    show: true,
     frame: false,
     backgroundColor: '#F7F5F2'
   })
-  win.setPosition(-4000, -4000)
+  win.setPosition(0, 0) // Must be on-screen for IntersectionObserver on hosted CI.
 
   await win.loadURL(`http://127.0.0.1:${port}/`)
   await delay(1200)
@@ -113,8 +114,15 @@ async function main() {
   )
   console.log(`[qa-web] document livrat prin drop: ${dropResult.bytes} bytes`)
 
-  // Give PDF.js time to parse and paint the first pages.
-  await delay(3500)
+  // Hosted Xvfb runners may take longer to paint. Check actual text, not a
+  // fixed short sleep that produces false negatives on overloaded runners.
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const rendered = await win.webContents.executeJavaScript(
+      "document.querySelectorAll('.textLayer span').length", true
+    )
+    if (rendered > 0) break
+    await delay(500)
+  }
 
   const state = await win.webContents.executeJavaScript(
     `(() => {
@@ -138,8 +146,14 @@ async function main() {
 
   console.log('[qa-web] stare:', JSON.stringify(state))
 
-  const image = await win.webContents.capturePage()
-  fs.writeFileSync(path.join(outDir, '01-web-reading.png'), image.toPNG())
+  try {
+    const image = await win.webContents.capturePage()
+    fs.writeFileSync(path.join(outDir, '01-web-reading.png'), image.toPNG())
+  } catch (error) {
+    // An unavailable GPU/compositor on a CI runner does not invalidate the
+    // DOM, PDF.js rendering, IndexedDB or error-state assertions below.
+    console.warn('[qa-web] screenshot unavailable:', String(error))
+  }
 
   // The reading session and the mirrored file must survive a reload.
   await win.reload()
@@ -154,8 +168,42 @@ async function main() {
   )
   console.log('[qa-web] după reload:', JSON.stringify(afterReload))
 
-  const ok = state.canvases > 0 && state.textLayers > 0 && state.total !== '—'
-  console.log(ok ? '[qa-web] OK - document randat cu strat de text' : '[qa-web] PROBLEMĂ - documentul nu s-a randat')
+  // Regression: two *different* documents with the same filename must keep
+  // distinct bytes, recents and annotations in IndexedDB.
+  const alternate = await PDFDocument.create()
+  alternate.addPage([300, 400]).drawText('Distinct PDF content', { x: 30, y: 300 })
+  const secondBase64 = Buffer.from(await alternate.save()).toString('base64')
+  await win.webContents.executeJavaScript(`(() => {
+    const binary = atob('${secondBase64}')
+    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0))
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([bytes], 'pdf-sample.pdf', { type: 'application/pdf' }))
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }))
+  })()`)
+  await delay(900)
+  await win.reload()
+  await delay(1200)
+  const uniqueRecents = await win.webContents.executeJavaScript(
+    "document.querySelectorAll('.recent-list__item').length", true
+  )
+  console.log('[qa-web] fișiere distincte cu același nume:', uniqueRecents)
+
+  // A truncated PDF must fail gracefully, never crash the renderer.
+  await win.webContents.executeJavaScript(`(async () => {
+    const response = await fetch('/sample.pdf')
+    const bytes = (await response.arrayBuffer()).slice(0, 256)
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([bytes], 'damaged.pdf', { type: 'application/pdf' }))
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }))
+  })()`)
+  await delay(1200)
+  const invalidHandled = await win.webContents.executeJavaScript(
+    "Boolean(document.querySelector('.welcome__card--error'))", true
+  )
+  console.log('[qa-web] fișier trunchiat tratat:', invalidHandled)
+
+  const ok = state.canvases > 0 && state.textLayers > 0 && state.total !== '—' && uniqueRecents === 2 && invalidHandled
+  console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')
 
   win.destroy()
   server.close()
