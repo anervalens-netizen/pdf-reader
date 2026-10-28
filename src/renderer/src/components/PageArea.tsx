@@ -23,6 +23,7 @@ function PageSlot({
   size,
   zoom,
   root,
+  forcePrint,
   hits,
   activeHitKey,
   signatureImage,
@@ -36,6 +37,7 @@ function PageSlot({
   size: PageSize
   zoom: number
   root: HTMLElement | null
+  forcePrint: boolean
   hits: ReturnType<typeof useApp>['state']['hits']
   activeHitKey: string | null
   signatureImage: string | null
@@ -79,7 +81,7 @@ function PageSlot({
       }}
       data-slot={pageNumber}
     >
-      {near && (
+      {(near || forcePrint) && (
         <PageView
           pageNumber={pageNumber}
           zoom={zoom}
@@ -253,6 +255,7 @@ export function PageArea({
                 size={size}
                 zoom={state.zoom}
                 root={scrollRef.current}
+                forcePrint={state.printing}
                 hits={hitsByPage.get(pageNumber) ?? []}
                 activeHitKey={activeHitKey}
                 signatureImage={signatureImage}

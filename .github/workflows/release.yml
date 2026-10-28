@@ -31,6 +31,7 @@ jobs:
         run: |
           npm run typecheck
           npm run test:export
+          npm run test:sw
 
       - name: Build instalator
         run: npm run dist:win
@@ -69,6 +70,7 @@ jobs:
         run: |
           npm run typecheck
           npm run test:export
+          npm run test:sw
 
       - name: Build pachete
         run: npm run dist:linux
@@ -117,6 +119,7 @@ jobs:
         run: |
           npm run typecheck
           npm run test:export
+          npm run test:sw
 
       - name: Build web + sincronizează shell-ul Android
         run: |

@@ -1,6 +1,6 @@
 {
   "name": "pdf-reader",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "PDF — a calm, fast PDF reader for desktop",
   "main": "./out/main/index.js",
   "author": {
@@ -25,6 +25,7 @@
     "dist:win": "npm run build && electron-builder --win nsis --publish never --config electron-builder.yml",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never --config electron-builder.yml",
     "test:export": "node scripts/make-sample-pdf.mjs && node scripts/test-export.mjs",
+    "test:sw": "node scripts/test-sw.cjs",
     "test:web": "node scripts/make-sample-pdf.mjs && npm run build:web && electron scripts/qa-web.cjs"
   },
   "dependencies": {
@@ -48,5 +49,8 @@
     "electron-vite": "6.0.0",
     "typescript": "^7.0.2",
     "vite": "8.3.5"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

@@ -181,6 +181,83 @@ async function main() {
   })()`, true)
   console.log('[qa-web] migrare fără pierderi:', legacyMigration)
 
+  // Codex P2: print preparation must populate every page, not only
+  // the near-viewport canvases used for interactive reading.
+  await win.webContents.executeJavaScript(`(() => {
+    window.__pdfPrintCapture = null
+    window.print = () => {
+      window.__pdfPrintCapture = {
+        pages: document.querySelectorAll('.page-slot').length,
+        ready: document.querySelectorAll('.page-slot .page[data-print-ready="true"]').length,
+        canvases: document.querySelectorAll('.page-slot canvas').length
+      }
+    }
+    document.querySelector('button[aria-label="Tipărește"]')?.click()
+  })()`, true)
+  let printState = null
+  for (let i = 0; i < 120; i++) {
+    printState = await win.webContents.executeJavaScript('window.__pdfPrintCapture', true)
+    if (printState) break
+    await delay(200)
+  }
+  console.log('[qa-web] pregătire imprimare:', printState)
+  const printReady = printState?.ready === 12 && printState.canvases === 12
+
+  // Codex P2 regression: an explicitly empty destination means the user
+  // cleared annotations. A subsequent import must NOT restore legacy notes.
+  await win.webContents.executeJavaScript(`(async () => {
+    const files = await new Promise((resolve, reject) => {
+      const req = indexedDB.open('pdf-web-files')
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    const key = await new Promise((resolve, reject) => {
+      const req = files.transaction('files').objectStore('files').getAllKeys()
+      req.onsuccess = () => resolve(req.result.find(k => k.startsWith('web:sha256:')))
+      req.onerror = () => reject(req.error)
+    })
+    files.close()
+    const db = await new Promise((resolve,reject) => {
+      const req = indexedDB.open('pdf')
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    await new Promise((resolve,reject) => {
+      const tx = db.transaction('annotations', 'readwrite')
+      tx.objectStore('annotations').put({path:key,annotations:[],updatedAt:Date.now()})
+      tx.oncomplete = resolve
+      tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+    const fileData = await (await fetch('/sample.pdf')).arrayBuffer()
+    const drop = new DataTransfer()
+    drop.items.add(new File([fileData], 'pdf-sample.pdf', {type:'application/pdf'}))
+    window.dispatchEvent(new DragEvent('drop', {dataTransfer:drop,bubbles:true,cancelable:true}))
+  })()`, true)
+  await delay(1300)
+  const emptyMigrationPreserved = await win.webContents.executeJavaScript(`(async () => {
+    const files = await new Promise(resolve => {
+      const req = indexedDB.open('pdf-web-files')
+      req.onsuccess = () => resolve(req.result)
+    })
+    const key = await new Promise(resolve => {
+      const req = files.transaction('files').objectStore('files').getAllKeys()
+      req.onsuccess = () => resolve(req.result.find(k => k.startsWith('web:sha256:')))
+    })
+    files.close()
+    const db = await new Promise(resolve => {
+      const req = indexedDB.open('pdf')
+      req.onsuccess = () => resolve(req.result)
+    })
+    const value = await new Promise(resolve => {
+      const req = db.transaction('annotations').objectStore('annotations').get(key)
+      req.onsuccess = () => resolve(req.result)
+    })
+    db.close()
+    return Array.isArray(value?.annotations) && value.annotations.length === 0
+  })()`,true)
+  console.log('[qa-web] ștergerea intenționată nu a fost anulată:', emptyMigrationPreserved)
+
   // Hosted Xvfb runners may take longer to paint. Check actual text, not a
   // fixed short sleep that produces false negatives on overloaded runners.
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -291,8 +368,8 @@ async function main() {
   }))()`, true)
   console.log('[qa-web] pagini / canvas active:', longState)
 
-  const ok = state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
-    uniqueRecents === 2 && invalidHandled && legacyMigration &&
+  const ok = printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
+    uniqueRecents === 2 && invalidHandled && legacyMigration && emptyMigrationPreserved &&
     longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20
   console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')
 

@@ -137,7 +137,9 @@ export async function migrateLegacyMetadata(oldPath: string, newPath: string): P
   const [oldAnnotations, newAnnotations, oldSession, newSession] = await Promise.all([
     getAnnotations(oldPath), getAnnotations(newPath), getSession(oldPath), getSession(newPath)
   ])
-  if (oldAnnotations?.length && !newAnnotations?.length) await saveAnnotations(newPath, oldAnnotations)
+  // An existing [] means the user intentionally cleared annotations.
+  // Only a missing destination record may inherit legacy annotations.
+  if (oldAnnotations?.length && newAnnotations === undefined) await saveAnnotations(newPath, oldAnnotations)
   if (oldSession && !newSession) await saveSession({ ...oldSession, path: newPath })
 }
 

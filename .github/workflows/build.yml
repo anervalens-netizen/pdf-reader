@@ -29,8 +29,10 @@ jobs:
       - name: Verificare tipuri
         run: npm run typecheck
 
-      - name: Test export PDF si formulare
-        run: npm run test:export
+      - name: Test export PDF, formulare și PWA offline
+        run: |
+          npm run test:export
+          npm run test:sw
 
       - name: Build instalator
         run: npm run dist:win
@@ -69,8 +71,10 @@ jobs:
       - name: Verificare tipuri
         run: npm run typecheck
 
-      - name: Test export PDF si formulare
-        run: npm run test:export
+      - name: Test export PDF, formulare și PWA offline
+        run: |
+          npm run test:export
+          npm run test:sw
 
       - name: Test UI Web / documente corupte / nume duplicate
         run: |
