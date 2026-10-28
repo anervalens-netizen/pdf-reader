@@ -11,9 +11,7 @@ release/
 
 # Artefacte QA
 qa/
-qa-packaged/
-qa-web/
-qa-ci/
+qa-*/
 samples/
 
 # Android / Capacitor
