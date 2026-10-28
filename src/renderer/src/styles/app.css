@@ -1085,6 +1085,9 @@ textarea {
   }
 }
 
+.page-tools__label { display: block; margin: 12px 0 6px; font-size: 12px; font-weight: 600; }
+.page-tools__input { display: block; width: 100%; max-width: 100%; }
+
 /* Modals ----------------------------------------------------------------- */
 .modal-backdrop {
   position: fixed;

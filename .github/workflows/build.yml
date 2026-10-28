@@ -33,6 +33,7 @@ jobs:
         run: |
           npm run test:export
           npm run test:sw
+          npm run test:pages
 
       - name: Build instalator
         run: npm run dist:win
@@ -75,6 +76,7 @@ jobs:
         run: |
           npm run test:export
           npm run test:sw
+          npm run test:pages
 
       - name: Test UI Web / documente corupte / nume duplicate
         run: |

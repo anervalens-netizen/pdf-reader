@@ -10,6 +10,7 @@ import { StatusBar } from './components/StatusBar'
 import { Toasts } from './components/Toasts'
 import { ErrorPanel, Welcome } from './components/Welcome'
 import { SignatureDialog } from './components/SignatureDialog'
+import { PageToolsDialog } from './components/PageToolsDialog'
 import { createId, NOTE_COLOR, type Annotation } from './lib/annotations'
 
 interface PendingNote {
@@ -47,6 +48,7 @@ export default function App(): JSX.Element {
   } = useApp()
 
   const [signatureOpen, setSignatureOpen] = useState(false)
+  const [pagesOpen, setPagesOpen] = useState(false)
   const [signatureImage, setSignatureImage] = useState<string | null>(null)
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null)
   const [noteText, setNoteText] = useState('')
@@ -315,6 +317,10 @@ export default function App(): JSX.Element {
   // a ref, so the native listener never closes over a stale render.
   const backHandlerRef = useRef<() => boolean>(() => false)
   backHandlerRef.current = (): boolean => {
+    if (pagesOpen) {
+      setPagesOpen(false)
+      return true
+    }
     if (pendingNote) {
       setPendingNote(null)
       setNoteText('')
@@ -387,7 +393,7 @@ export default function App(): JSX.Element {
   return (
     <div className="app" data-platform={api.platform()}>
       <TitleBar />
-      <Toolbar onSignatureRequest={() => setSignatureOpen(true)} />
+      <Toolbar onSignatureRequest={() => setSignatureOpen(true)} onPagesRequest={() => setPagesOpen(true)} />
 
       <div className="app__body">
         {state.sidebarOpen && state.file && <Sidebar />}
@@ -432,6 +438,8 @@ export default function App(): JSX.Element {
 
       <StatusBar />
       <Toasts />
+
+      {pagesOpen && <PageToolsDialog onClose={() => setPagesOpen(false)} />}
 
       <SignatureDialog
         open={signatureOpen}

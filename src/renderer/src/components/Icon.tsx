@@ -98,6 +98,12 @@ const paths: Record<string, JSX.Element> = {
       <path d="M9 20h6M12 16v4" />
     </>
   ),
+  pages: (
+    <>
+      <path d="M5 5h11a2 2 0 012 2v12H7a2 2 0 01-2-2z" />
+      <path d="M9 2h10a2 2 0 012 2v12M9 10h6M9 14h6" />
+    </>
+  ),
   file: (
     <>
       <path d="M6 3.5h7l5 5v12H6z" />

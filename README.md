@@ -124,6 +124,16 @@ build/        logo-ul vectorial și icoanele rasterizate
 Electron 45 · React 19 · TypeScript 7 · Vite 8 · PDF.js 6.4 · pdf-lib 1.17 ·
 Capacitor 8 · IndexedDB
 
+## Versiunea 1.1.0 — operații PDF de bază
+
+- Rotire cu 90° a paginii curente.
+- Extragere pagini cu intervale precum `1-3,5`, cu verificarea limitelor.
+- Combinare a documentului curent cu un al doilea PDF ales prin dialogul sistemului.
+- Separare în două documente după pagina aleasă; fiecare parte necesită salvare explicită.
+- Originalul nu este suprascris. Adnotările și valorile editate sunt incluse prin export înainte de operație. Unele formulare interactive sau semnături digitale pot fi afectate prin reconstruirea paginilor.
+- Interfață simplă accesibilă din butonul „Operații pagini”, pe Windows, Linux și Android.
+- Regresii automate pentru rotire, intervale invalide, extragere, combinare, separare și integritatea originalului.
+
 ## Versiunea 1.0.3 — remedierea observațiilor Codex
 
 Au fost citite review-urile automate din PR #1 și PR #2; corecțiile acestei versiuni țintesc defectele reproductibile identificate de Codex:

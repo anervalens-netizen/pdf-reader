@@ -13,9 +13,11 @@ const TOOLS: { id: Tool; icon: IconName; label: string; shortcut: string }[] = [
 ]
 
 export function Toolbar({
-  onSignatureRequest
+  onSignatureRequest,
+  onPagesRequest
 }: {
   onSignatureRequest: () => void
+  onPagesRequest: () => void
 }): JSX.Element {
   const {
     state,
@@ -247,6 +249,16 @@ export function Toolbar({
       <div className="toolbar__divider" />
 
       <div className="toolbar__group">
+        <button
+          type="button"
+          className="icon-btn"
+          title="Operații pagini: rotire, extragere, combinare, separare"
+          aria-label="Operații pagini"
+          disabled={!state.file || state.saving}
+          onClick={onPagesRequest}
+        >
+          <Icon name="pages" />
+        </button>
         <button
           type="button"
           className="icon-btn"
