@@ -13,6 +13,7 @@ import * as db from '../lib/db'
 import { fileToRecord } from '../lib/webApi'
 import { loadDocument, type PDFDocumentProxy } from '../lib/pdf'
 import { buildPageIndex, findMatches } from '../lib/textIndex'
+import { fontForFormValues } from '../lib/unicodeFormFont'
 import { extractPdfPages, mergePdfDocuments, parsePageRange, rotatePdfPage, splitPdfAt } from '../lib/pageTools'
 import type { TextItemLike } from '../lib/geometry'
 import {
@@ -581,7 +582,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       }
       const formValues = await collectFormValues()
       const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
-      const result = await exportAnnotatedPdf(data, annotations, { formValues })
+      const unicodeFontBytes = await fontForFormValues(formValues)
+      const result = await exportAnnotatedPdf(data, annotations, { formValues, unicodeFontBytes })
       const baseName = file.name.replace(/\.pdf$/i, '')
       const saved = await api.saveFile({
         defaultName: state.annotations.length ? `${baseName}-adnotat.pdf` : file.name,
@@ -628,7 +630,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const values = await collectFormValues()
       if (documentEpoch.current !== epoch) throw new Error('Documentul s-a schimbat în timpul operației.')
       const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
-      const prepared = await exportAnnotatedPdf(source, annotations, { formValues: values })
+      const unicodeFontBytes = await fontForFormValues(values)
+      const prepared = await exportAnnotatedPdf(source, annotations, { formValues: values, unicodeFontBytes })
       const base = file.name.replace(/\.pdf$/i, '')
       const save = async (data: ArrayBuffer, name: string): Promise<boolean> => {
         const saved = await api.saveFile({ defaultName: name, data, title: 'Salvează un PDF nou' })

@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PDFDocument, PDFDict, PDFHexString, PDFName } from 'pdf-lib'
+import { PDFDocument, PDFDict, PDFHexString, PDFName, PDFRawStream } from 'pdf-lib'
 import { deflateSync } from 'node:zlib'
 import { exportAnnotatedPdf } from '../src/renderer/src/lib/annotations.ts'
 
@@ -198,14 +198,68 @@ if (!savedForm.getCheckBox('approved').isChecked()) failures.push('checkbox lost
 if (savedForm.getRadioGroup('choice').getSelected() !== 'B') failures.push('radio selection lost')
 if (savedForm.getDropdown('category').getSelected()[0] !== 'Private') failures.push('dropdown selection lost')
 
-// Romanian diacritics must not cause an export exception or lose field /V.
-// An appearance-warning is expected until a bundled Unicode font is added.
+// Unicode output must contain an actual embedded font in widget appearance,
+// not merely store correct /V with NeedAppearances.
+const unicodeBytes = readFileSync(resolve(root, 'node_modules/@expo-google-fonts/noto-sans/400Regular/NotoSans_400Regular.ttf'))
 const unicodeForm = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
+  formValues: [{ name: 'client', type: 'Tx', value: 'Ștefan Țucă ăâîșț' }],
+  unicodeFontBytes: unicodeBytes
+})
+if (unicodeForm.warnings.length) failures.push('Unicode form warnings: ' + unicodeForm.warnings.join(' | '))
+const loadedUnicode = await PDFDocument.load(unicodeForm.data)
+const unicodeField = loadedUnicode.getForm().getTextField('client')
+if (unicodeField.getText() !== 'Ștefan Țucă ăâîșț') failures.push('Unicode form field lost')
+const unicodeAppearance = unicodeField.acroField.getWidgets()[0].getAppearances()?.normal
+const appearanceStream = unicodeAppearance ? loadedUnicode.context.lookup(unicodeAppearance, PDFRawStream) : null
+const resourceDict = appearanceStream?.dict.lookup(PDFName.of('Resources'), PDFDict)
+const fontResources = resourceDict?.lookup(PDFName.of('Font'), PDFDict)
+const embeddedFonts = fontResources?.entries().map(([,ref]) => loadedUnicode.context.lookup(ref, PDFDict)) ?? []
+const hasUnicodeAppearance = embeddedFonts.some((font) => font.get(PDFName.of('Subtype'))?.toString() === '/Type0')
+if (!hasUnicodeAppearance) failures.push('Unicode appearance lacks embedded Type0 font')
+console.log('unicode form value + embedded Type0 appearance:', hasUnicodeAppearance)
+// Preserve the fallback on systems without font bytes.
+const noFontExport = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
   formValues: [{ name: 'client', type: 'Tx', value: 'Ștefan Țucă' }]
 })
-const unicodeValue = (await PDFDocument.load(unicodeForm.data)).getForm().getTextField('client').getText()
-if (unicodeValue !== 'Ștefan Țucă') failures.push('Unicode form field lost')
-if (!unicodeForm.warnings.some((warning) => warning.includes('diacritice'))) failures.push('Unicode visual appearance warning missing')
+if (!noFontExport.warnings.some((warning) => warning.includes('diacritice'))) failures.push('missing-font fallback warning absent')
+
+// A Latin font does not contain CJK or emoji. Never produce fake glyphs with
+// a false success toast: keep /V and tell the PDF reader to regenerate AP.
+for (const unsupportedText of ['你好，世界', 'Salut 😀']) {
+  const unsupported = await exportAnnotatedPdf(originalForm.buffer.slice(originalForm.byteOffset, originalForm.byteOffset + originalForm.byteLength), [], {
+    formValues: [{ name: 'client', type: 'Tx', value: unsupportedText }],
+    unicodeFontBytes: unicodeBytes
+  })
+  const unsupportedDoc = await PDFDocument.load(unsupported.data)
+  if (unsupportedDoc.getForm().getTextField('client').getText() !== unsupportedText) failures.push('unsupported glyph field value was lost')
+  if (!unsupported.warnings.some((message) => message.includes('nu acoperă'))) failures.push('unsupported glyph warning missing')
+  const acroFormRef = unsupportedDoc.catalog.get(PDFName.of('AcroForm'))
+  const acroForm = unsupportedDoc.context.lookup(acroFormRef, PDFDict)
+  if (acroForm.get(PDFName.of('NeedAppearances'))?.toString() !== 'true') failures.push('unsupported glyph must request new field appearances')
+}
+console.log('unsupported CJK/emoji values preserved with warning and NeedAppearances')
+
+// Newline characters are separators, not glyphs. A multiline Unicode text
+// field must still get a regenerated appearance without unsupported warnings.
+const multilineDoc = await PDFDocument.create()
+const multilinePage = multilineDoc.addPage([595, 842])
+const multiline = multilineDoc.getForm().createTextField('address')
+multiline.enableMultiline()
+multiline.addToPage(multilinePage, { x: 50, y: 600, width: 240, height: 80 })
+const multilineOriginal = await multilineDoc.save()
+const multilineText = 'café\nParis\r\nBucurești'
+const multilineResult = await exportAnnotatedPdf(multilineOriginal.buffer.slice(multilineOriginal.byteOffset, multilineOriginal.byteOffset + multilineOriginal.byteLength), [], {
+  formValues: [{ name: 'address', type: 'Tx', value: multilineText }],
+  unicodeFontBytes: unicodeBytes
+})
+if (multilineResult.warnings.length) failures.push('multiline form unexpected warning: ' + multilineResult.warnings.join(' | '))
+const multilineReloaded = await PDFDocument.load(multilineResult.data)
+if (multilineReloaded.getForm().getTextField('address').getText() !== multilineText) failures.push('multiline form value lost')
+const multilineAppearance = multilineReloaded.getForm().getTextField('address').acroField.getWidgets()[0].getAppearances()?.normal
+const multilineStream = multilineAppearance ? multilineReloaded.context.lookup(multilineAppearance, PDFRawStream) : null
+const multilineFonts = multilineStream?.dict.lookup(PDFName.of('Resources'), PDFDict)?.lookup(PDFName.of('Font'), PDFDict)
+if (!multilineFonts?.entries().some(([,ref]) => multilineReloaded.context.lookup(ref, PDFDict).get(PDFName.of('Subtype'))?.toString() === '/Type0')) failures.push('multiline Unicode appearance missing')
+console.log('multiline Unicode value + appearance preserved')
 
 // Round-trip: the exported file must be re-loadable and re-savable.
 const resaved = await reloaded.save()

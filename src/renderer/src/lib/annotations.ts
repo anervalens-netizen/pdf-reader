@@ -1,4 +1,5 @@
 import { PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, rgb, BlendMode, LineCapStyle, type PDFPage } from 'pdf-lib'
+import fontkit from '@pdf-lib/fontkit'
 import type { PdfQuad, PdfRect } from './geometry'
 
 export type AnnotationType = 'highlight' | 'underline' | 'note' | 'ink' | 'signature'
@@ -137,6 +138,8 @@ async function drawSignature(
 export interface ExportOptions {
   /** Form field values captured from the live PDF.js document. */
   formValues?: { name: string; type: string; value: string | boolean }[]
+  /** Font bytes for embedding Unicode widget appearance glyphs. */
+  unicodeFontBytes?: Uint8Array
 }
 
 export interface ExportResult {
@@ -253,9 +256,41 @@ export async function exportAnnotatedPdf(
     }
   }
 
+  // WinAnsi Helvetica cannot draw Romanian diacritics in widget appearances.
+  // Validate every edited glyph BEFORE generating a new appearance; fontkit
+  // silently substitutes missing glyphs (for example CJK or emoji).
+  let deferAppearancesToReader = false
+  const editedText = options.formValues?.filter((field) => typeof field.value === 'string') ?? []
+  const requiresUnicode = editedText.some((field) => /[^\u0000-\u007f]/u.test(field.value as string))
+  if (options.unicodeFontBytes?.byteLength && requiresUnicode) {
+    try {
+      const parsedFont = fontkit.create(options.unicodeFontBytes)
+      const missingGlyphs = editedText.flatMap((field) => [...(field.value as string)])
+        // Newlines and tabs are layout separators, not printable glyphs.
+        .filter((char) => char !== '\n' && char !== '\r' && char !== '\t')
+        .filter((char) => !parsedFont.hasGlyphForCodePoint(char.codePointAt(0)!))
+      if (missingGlyphs.length > 0) {
+        deferAppearancesToReader = true
+        warnings.push('Fontul inclus nu acoperă toate caracterele formularului. Textul este păstrat, dar aspectul vizual trebuie verificat în cititorul PDF.')
+      } else {
+        pdfDoc.registerFontkit(fontkit)
+        const unicodeFont = await pdfDoc.embedFont(options.unicodeFontBytes, { subset: true })
+        pdfDoc.getForm().updateFieldAppearances(unicodeFont)
+      }
+    } catch (error) {
+      deferAppearancesToReader = true
+      warnings.push('Fontul Unicode nu a putut genera aspectul formularului: ' + String(error))
+    }
+  }
+
+  if (deferAppearancesToReader) {
+    const formRef = pdfDoc.catalog.get(PDFName.of('AcroForm'))
+    if (formRef) pdfDoc.context.lookup(formRef, PDFDict).set(PDFName.of('NeedAppearances'), PDFBool.True)
+  }
+
   let bytes: Uint8Array
   try {
-    bytes = await pdfDoc.save()
+    bytes = await pdfDoc.save({ updateFieldAppearances: !deferAppearancesToReader })
   } catch (error) {
     // pdf-lib's built-in Helvetica cannot draw Romanian diacritics in form
     // appearances. Keep the correct Unicode /V value instead of failing the
