@@ -15,13 +15,14 @@
     "isolatedModules": true,
     "noEmit": true,
     "composite": true,
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [
     "electron.vite.config.ts",
+    "vite.web.config.ts",
+    "vite.shared.ts",
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",

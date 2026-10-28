@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "description": "PDF — a calm, fast PDF reader for desktop",
   "main": "./out/main/index.js",
-  "author": "Andrei Stancu",
+  "author": {
+    "name": "Andrei Stancu",
+    "email": "anervalens-netizen@users.noreply.github.com"
+  },
+  "desktopName": "pdf-reader",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -12,9 +16,14 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "icons": "electron scripts/render-logo.cjs",
+    "build:web": "vite build --config vite.web.config.ts",
+    "dev:web": "vite --config vite.web.config.ts",
+    "preview:web": "vite preview --config vite.web.config.ts",
+    "android:sync": "npm run build:web && cap sync android",
+    "android:open": "cap open android",
     "pack:win": "npm run build && electron-builder --win --dir --config electron-builder.yml",
-    "dist:win": "npm run build && electron-builder --win nsis --config electron-builder.yml",
-    "dist:linux": "npm run build && electron-builder --linux AppImage deb --config electron-builder.yml",
+    "dist:win": "npm run build && electron-builder --win nsis --publish never --config electron-builder.yml",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never --config electron-builder.yml",
     "test:export": "node scripts/test-export.mjs"
   },
   "dependencies": {
@@ -25,6 +34,10 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "@types/node": "26.6.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -32,7 +45,7 @@
     "electron": "45.1.0",
     "electron-builder": "26.18.0",
     "electron-vite": "6.0.0",
-    "typescript": "5.9.3",
+    "typescript": "^7.0.2",
     "vite": "8.3.5"
   }
 }

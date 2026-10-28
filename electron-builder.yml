@@ -51,6 +51,9 @@ linux:
   category: Office
   icon: build/icon.png
   artifactName: PDF-${version}-${arch}.${ext}
+  # Keep the .desktop entry in sync with the executable name so the desktop
+  # environment links the running window to the launcher icon.
+  syncDesktopName: true
 
 publish:
   provider: github

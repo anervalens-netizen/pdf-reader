@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import { useApp } from '../state/store'
-import { api } from '../lib/api'
+import { api, isDesktop } from '../lib/api'
 import { Icon } from './Icon'
 
 export function TitleBar(): JSX.Element {
@@ -19,7 +19,7 @@ export function TitleBar(): JSX.Element {
       </div>
 
       <div className="titlebar__right">
-        {api.platform() !== 'win32' && (
+        {isDesktop && api.platform() !== 'win32' && (
           <div className="window-controls" role="group" aria-label="Controale fereastră">
             <button
               type="button"

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import { useApp, type Tool } from './state/store'
-import { api } from './lib/api'
+import { api, isDesktop } from './lib/api'
+import { registerBackHandler } from './lib/native'
 import { TitleBar } from './components/TitleBar'
 import { Toolbar } from './components/Toolbar'
 import { Sidebar } from './components/Sidebar'
@@ -31,6 +32,7 @@ export default function App(): JSX.Element {
     toast,
     openDialog,
     openPath,
+    openFile,
     closeDocument,
     setPage,
     setZoom,
@@ -127,14 +129,18 @@ export default function App(): JSX.Element {
       if (event.relatedTarget === null) document.body.classList.remove('is-dragging')
     }
     const onDrop = (event: DragEvent): void => {
-      // The preload resolves the real file path and asks the main process to
-      // open it; the renderer only reacts to the visual state.
+      // On the desktop the preload resolves the real file path and asks the
+      // main process to open it; the renderer only reacts to the visual state.
+      // In the browser there is no preload, so the file is opened here.
       event.preventDefault()
       document.body.classList.remove('is-dragging')
       const file = event.dataTransfer?.files?.[0]
-      if (file && !file.name.toLowerCase().endsWith('.pdf')) {
+      if (!file) return
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
         toast('PDF poate deschide doar fișiere PDF.', 'error')
+        return
       }
+      if (!isDesktop) void openFile(file)
     }
     window.addEventListener('dragover', onDragOver)
     window.addEventListener('dragleave', onDragLeave)
@@ -144,7 +150,7 @@ export default function App(): JSX.Element {
       window.removeEventListener('dragleave', onDragLeave)
       window.removeEventListener('drop', onDrop)
     }
-  }, [toast])
+  }, [toast, openFile])
 
   // --- Keyboard shortcuts ---------------------------------------------------
   useEffect(() => {
@@ -285,6 +291,31 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (pendingNote) window.setTimeout(() => noteInputRef.current?.focus(), 30)
   }, [pendingNote])
+
+  // --- Android back button --------------------------------------------------
+  // The handler is registered once and always reads the current state through
+  // a ref, so the native listener never closes over a stale render.
+  const backHandlerRef = useRef<() => boolean>(() => false)
+  backHandlerRef.current = (): boolean => {
+    if (pendingNote) {
+      setPendingNote(null)
+      setNoteText('')
+      return true
+    }
+    if (signatureOpen) {
+      setSignatureOpen(false)
+      return true
+    }
+    if (state.file) {
+      closeDocument()
+      return true
+    }
+    return false
+  }
+
+  useEffect(() => {
+    void registerBackHandler(() => backHandlerRef.current())
+  }, [])
 
   const commitNote = useCallback(() => {
     if (!pendingNote) return

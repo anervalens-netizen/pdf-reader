@@ -74,9 +74,70 @@ jobs:
             release/PDF-*.AppImage
             release/PDF-*.deb
 
+  android:
+    name: Android - APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Acceptă licențele Android SDK
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" > /dev/null || true
+
+      - name: Build web + sincronizează shell-ul Android
+        run: |
+          npm run build:web
+          npx cap sync android
+
+      - name: Build APK (debug)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdf-android
+          if-no-files-found: error
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      # Varianta semnată se construiește doar dacă există cheia în secrets.
+      - name: Build APK semnat (release)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        working-directory: android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.storeFile=keystore.jks \
+            -Pandroid.injected.signing.storePassword="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.keyAlias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.keyPassword="$KEYSTORE_PASSWORD"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        with:
+          name: pdf-android-release
+          if-no-files-found: ignore
+          path: android/app/build/outputs/apk/release/app-release.apk
+
   release:
     name: Publică release-ul
-    needs: [windows, linux]
+    needs: [windows, linux, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -88,6 +149,17 @@ jobs:
         with:
           name: pdf-linux
           path: artifacts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdf-android
+          path: artifacts
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pdf-android-release
+          path: artifacts-release
 
       - name: Creează release-ul GitHub
         uses: softprops/action-gh-release@v2
@@ -101,3 +173,5 @@ jobs:
             artifacts/latest.yml
             artifacts/PDF-*.AppImage
             artifacts/PDF-*.deb
+            artifacts/app-debug.apk
+            artifacts-release/app-release.apk

@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { api } from '../lib/api'
 import * as db from '../lib/db'
+import { fileToRecord } from '../lib/webApi'
 import { loadDocument, type PDFDocumentProxy } from '../lib/pdf'
 import { buildPageIndex, findMatches } from '../lib/textIndex'
 import type { TextItemLike } from '../lib/geometry'
@@ -218,6 +219,8 @@ export interface AppContextValue {
   toast: (message: string, tone?: Toast['tone']) => void
   openDialog: () => Promise<void>
   openPath: (path: string, password?: string) => Promise<void>
+  /** Opens a file dropped on the window (browser builds only). */
+  openFile: (file: File) => Promise<void>
   closeDocument: () => void
   setPage: (page: number) => void
   setZoom: (zoom: number, mode?: ZoomMode) => void
@@ -361,6 +364,21 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         return
       }
       await loadFile(file, password)
+    },
+    [loadFile, toast]
+  )
+
+  // Drag & drop on the web/Android builds: the browser hands over the bytes,
+  // so the document is mirrored locally to keep the recents list working.
+  const openFile = useCallback(
+    async (file: File) => {
+      try {
+        const record = await fileToRecord(file)
+        await loadFile(record)
+      } catch (error) {
+        console.error('[open] failed', error)
+        toast('Documentul nu a putut fi deschis.', 'error')
+      }
     },
     [loadFile, toast]
   )
@@ -569,6 +587,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       toast,
       openDialog,
       openPath,
+      openFile,
       closeDocument,
       setPage,
       setZoom,
@@ -592,6 +611,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       toast,
       openDialog,
       openPath,
+      openFile,
       closeDocument,
       setPage,
       setZoom,
