@@ -253,6 +253,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const dataRef = useRef<ArrayBuffer | null>(null)
   const searchToken = useRef(0)
   const printInProgress = useRef(false)
+  // Increased before each document load/close, independent of search events.
+  const documentEpoch = useRef(0)
   const annotationsRef = useRef<Annotation[]>([])
   const annotationPathRef = useRef<string | null>(null)
   const annotationWritesRef = useRef<Map<string, Promise<void>>>(new Map())
@@ -318,7 +320,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const loadFile = useCallback(
     async (file: { path: string; name: string; size: number; data: ArrayBuffer }, password?: string) => {
-      // Invalidate any search that is still scanning the previous document.
+      // Cancel in-flight print preparation and searches before replacing PDF.
+      documentEpoch.current += 1
       searchToken.current += 1
       dispatch({ type: 'file/loading' })
       try {
@@ -422,6 +425,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   )
 
   const closeDocument = useCallback(() => {
+    documentEpoch.current += 1
     searchToken.current += 1
     void docRef.current?.cleanup()
     docRef.current = null
@@ -611,16 +615,23 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       toast('Pentru mai mult de 35 de pagini, salvează PDF-ul și tipărește din cititorul sistemului.', 'info')
       return
     }
+    const requestedDocument = docRef.current
+    const requestedEpoch = documentEpoch.current
     printInProgress.current = true
     dispatch({ type: 'printing/set', printing: true })
     void (async () => {
       const limit = Date.now() + 25000
       while (Date.now() < limit) {
-        if (!docRef.current || state.status !== 'ready') throw new Error('Documentul a fost închis.')
+        if (docRef.current !== requestedDocument || documentEpoch.current !== requestedEpoch || state.status !== 'ready') {
+          throw new Error('Documentul s-a schimbat în timpul pregătirii tipăririi.')
+        }
         const pages = document.querySelectorAll('.page-slot .page[data-print-ready="true"]').length
         if (pages === state.numPages) {
           // Print only after all page render tasks and annotation layers finish.
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+          if (docRef.current !== requestedDocument || documentEpoch.current !== requestedEpoch) {
+            throw new Error('Documentul s-a schimbat înainte de imprimare.')
+          }
           window.print()
           return
         }

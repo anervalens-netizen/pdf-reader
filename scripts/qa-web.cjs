@@ -368,9 +368,35 @@ async function main() {
   }))()`, true)
   console.log('[qa-web] pagini / canvas active:', longState)
 
+  // Codex P2 on PR #3: replacing a PDF during print preparation must
+  // never print the replacement, even if it also contains 12 pages.
+  await win.webContents.executeJavaScript(`(async () => {
+    const bytes = await (await fetch('/sample.pdf')).arrayBuffer()
+    const input = new DataTransfer()
+    input.items.add(new File([bytes], 'race-original.pdf', {type:'application/pdf'}))
+    window.dispatchEvent(new DragEvent('drop', {dataTransfer: input,bubbles:true,cancelable:true}))
+  })()`, true)
+  await delay(1100)
+  const replacementDoc = await PDFDocument.create()
+  for (let n=0; n<12; n++) replacementDoc.addPage([400,500])
+  const replacementBase64 = Buffer.from(await replacementDoc.save()).toString('base64')
+  await win.webContents.executeJavaScript(`(() => {
+    window.__racePrinted = false
+    window.print = () => { window.__racePrinted = true }
+    document.querySelector('button[aria-label="Tipărește"]')?.click()
+    const content = atob('${replacementBase64}')
+    const input = new DataTransfer()
+    input.items.add(new File([Uint8Array.from(content, char => char.charCodeAt(0))],
+      'race-replacement.pdf', { type:'application/pdf' }))
+    window.dispatchEvent(new DragEvent('drop', {dataTransfer: input,bubbles:true,cancelable:true}))
+  })()`, true)
+  await delay(1600)
+  const racePrevented = await win.webContents.executeJavaScript('window.__racePrinted === false', true)
+  console.log('[qa-web] schimbare document anulează imprimarea:', racePrevented)
+
   const ok = printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
     uniqueRecents === 2 && invalidHandled && legacyMigration && emptyMigrationPreserved &&
-    longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20
+    longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20 && racePrevented
   console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')
 
   win.destroy()
