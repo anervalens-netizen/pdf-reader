@@ -1249,7 +1249,20 @@ body.is-dragging::after {
 @media (max-width: 680px) {
   .toolbar {
     overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-inline: 8px;
   }
+  .toolbar::-webkit-scrollbar { display: none; }
+  .toolbar__group { flex-shrink: 0; }
+  .toolbar__divider { flex-shrink: 0; margin-inline: 3px; }
+  .toolbar__spacer { flex: 0 0 2px; }
+  .welcome { padding: 16px; }
+  .welcome__card { max-width: 100%; padding: 22px 18px; }
+  .welcome__actions { flex-wrap: wrap; }
+  .welcome__title { font-size: clamp(21px, 5vw, 32px); }
 
   .searchbar {
     right: 10px;

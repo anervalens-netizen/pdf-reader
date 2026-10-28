@@ -9,6 +9,7 @@ import { registerIpcHandlers } from './ipc'
 
 /** Files requested by the OS (double-click on a .pdf, "Open with", launch args). */
 const pendingOpens = new Set<string>()
+let rendererReady = false
 
 function isPdf(path: string): boolean {
   return extname(path).toLowerCase() === '.pdf'
@@ -40,7 +41,7 @@ function statSyncSafe(path: string): { isFile(): boolean } | null {
 function flushPendingOpens(): void {
   if (pendingOpens.size === 0) return
   const win = getMainWindow()
-  if (!win) return
+  if (!win || !rendererReady) return
   for (const path of pendingOpens) {
     win.webContents.send('pdf:file-opened', { path, name: basename(path) })
   }
@@ -94,17 +95,22 @@ if (!app.requestSingleInstanceLock()) {
 app.whenReady().then(async () => {
   registerIpcHandlers()
 
+  ipcMain.on('pdf:renderer-ready', (event) => {
+    if (event.sender !== getMainWindow()?.webContents) return
+    rendererReady = true
+    flushPendingOpens()
+  })
+
   ipcMain.on('pdf:file-dropped', (_event, path: string) => {
     if (typeof path === 'string' && path) void openPathInApp(path)
   })
 
   const win = createWindow(loadWindowState())
   const { loadRenderer } = await import('./window')
+  win.webContents.on('did-start-loading', () => { rendererReady = false })
   await loadRenderer(win)
 
   buildApplicationMenu(() => getMainWindow())
-
-  win.webContents.on('did-finish-load', () => flushPendingOpens())
 
   if (process.env.PDF_CAPTURE_DIR && process.env.PDF_CAPTURE_PDF) {
     void import('./capture').then((m) => m.runCaptureSequence(win, process.env.PDF_CAPTURE_PDF!))
@@ -113,6 +119,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const created = createWindow(loadWindowState())
+      rendererReady = false
       void loadRenderer(created)
     }
   })

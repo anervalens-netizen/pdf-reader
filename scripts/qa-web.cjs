@@ -15,6 +15,7 @@ const { app, BrowserWindow } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
+const { PDFDocument } = require('pdf-lib')
 
 const root = path.resolve(__dirname, '..')
 const dist = path.join(root, 'dist-web')
@@ -154,8 +155,42 @@ async function main() {
   )
   console.log('[qa-web] după reload:', JSON.stringify(afterReload))
 
-  const ok = state.canvases > 0 && state.textLayers > 0 && state.total !== '—'
-  console.log(ok ? '[qa-web] OK - document randat cu strat de text' : '[qa-web] PROBLEMĂ - documentul nu s-a randat')
+  // Regression: two *different* documents with the same filename must keep
+  // distinct bytes, recents and annotations in IndexedDB.
+  const alternate = await PDFDocument.create()
+  alternate.addPage([300, 400]).drawText('Distinct PDF content', { x: 30, y: 300 })
+  const secondBase64 = Buffer.from(await alternate.save()).toString('base64')
+  await win.webContents.executeJavaScript(`(() => {
+    const binary = atob('${secondBase64}')
+    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0))
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([bytes], 'pdf-sample.pdf', { type: 'application/pdf' }))
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }))
+  })()`)
+  await delay(900)
+  await win.reload()
+  await delay(1200)
+  const uniqueRecents = await win.webContents.executeJavaScript(
+    "document.querySelectorAll('.recent-list__item').length", true
+  )
+  console.log('[qa-web] fișiere distincte cu același nume:', uniqueRecents)
+
+  // A truncated PDF must fail gracefully, never crash the renderer.
+  await win.webContents.executeJavaScript(`(async () => {
+    const response = await fetch('/sample.pdf')
+    const bytes = (await response.arrayBuffer()).slice(0, 256)
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([bytes], 'damaged.pdf', { type: 'application/pdf' }))
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }))
+  })()`)
+  await delay(1200)
+  const invalidHandled = await win.webContents.executeJavaScript(
+    "Boolean(document.querySelector('.welcome__card--error'))", true
+  )
+  console.log('[qa-web] fișier trunchiat tratat:', invalidHandled)
+
+  const ok = state.canvases > 0 && state.textLayers > 0 && state.total !== '—' && uniqueRecents === 2 && invalidHandled
+  console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')
 
   win.destroy()
   server.close()

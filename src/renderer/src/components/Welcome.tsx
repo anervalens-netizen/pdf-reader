@@ -80,6 +80,8 @@ export function ErrorPanel(): JSX.Element {
     retryRef.current?.focus()
   }, [])
 
+  const invalidStructure = /Invalid PDF structure|Invalid PDF|InvalidXRef|Missing PDF/i.test(state.error ?? '')
+
   return (
     <div className="welcome">
       <div className="welcome__card welcome__card--error">
@@ -87,7 +89,8 @@ export function ErrorPanel(): JSX.Element {
           <Icon name="shield" size={24} />
         </div>
         <h1 className="welcome__title">Documentul nu a putut fi deschis</h1>
-        <p className="welcome__subtitle">{state.error}</p>
+        <p className="welcome__subtitle">{invalidStructure ? 'Fișierul PDF pare incomplet sau deteriorat.' : state.error}</p>
+        {invalidStructure && <p className="welcome__subtitle">Descarcă din nou documentul de la sursă. Originalul nu a fost modificat.</p>}
         <div className="welcome__actions">
           <button type="button" className="btn btn--primary" ref={retryRef} onClick={() => void openDialog()}>
             Deschide alt document

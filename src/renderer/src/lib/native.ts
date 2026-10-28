@@ -17,6 +17,36 @@ interface AppPlugin {
   exitApp(): void
 }
 
+interface NativeSaveResult {
+  canceled: boolean
+  path?: string
+  error?: string
+}
+
+interface PdfFilesPlugin {
+  savePdf(options: { fileName: string; base64: string }): Promise<NativeSaveResult>
+}
+
+/** Save through Android's system document picker (SAF); no external-storage permission. */
+export async function savePdfOnAndroid(fileName: string, data: ArrayBuffer): Promise<NativeSaveResult> {
+  if (!isNativeShell()) throw new Error('Android native shell unavailable')
+  // FileReader converts binary without a massive String.fromCharCode spread.
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('PDF read failed'))
+    reader.onload = () => {
+      const result = String(reader.result ?? '')
+      const separator = result.indexOf(',')
+      if (separator < 0) reject(new Error('Could not encode PDF'))
+      else resolve(result.slice(separator + 1))
+    }
+    reader.readAsDataURL(new Blob([data], { type: 'application/pdf' }))
+  })
+  const { registerPlugin } = await import('@capacitor/core')
+  const files = registerPlugin<PdfFilesPlugin>('PdfFiles')
+  return files.savePdf({ fileName, base64 })
+}
+
 /** True when the renderer runs inside the Capacitor (Android) shell. */
 export function isNativeShell(): boolean {
   const capacitor = (window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor

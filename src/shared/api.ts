@@ -55,4 +55,5 @@ export interface PdfApi {
   checkForUpdates(): Promise<{ status: string; version?: string; message?: string }>
   onMenuAction(handler: (action: string) => void): () => void
   onFileOpened(handler: (payload: { path: string; name: string }) => void): () => void
+  rendererReady(): void
 }

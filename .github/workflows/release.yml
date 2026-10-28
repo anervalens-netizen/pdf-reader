@@ -27,6 +27,11 @@ jobs:
 
       - run: npm ci
 
+      - name: Verificare tipuri si export
+        run: |
+          npm run typecheck
+          npm run test:export
+
       - name: Build instalator
         run: npm run dist:win
         env:
@@ -59,6 +64,11 @@ jobs:
           sudo apt-get install -y fakeroot dpkg
 
       - run: npm ci
+
+      - name: Verificare tipuri si export
+        run: |
+          npm run typecheck
+          npm run test:export
 
       - name: Build pachete
         run: npm run dist:linux
@@ -102,6 +112,11 @@ jobs:
         run: |
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "platforms;android-36" > /dev/null || true
+
+      - name: Verificare tipuri si export
+        run: |
+          npm run typecheck
+          npm run test:export
 
       - name: Build web + sincronizează shell-ul Android
         run: |

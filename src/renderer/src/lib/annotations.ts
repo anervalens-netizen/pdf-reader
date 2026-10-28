@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, BlendMode, LineCapStyle, type PDFPage, type PDFFont } from 'pdf-lib'
+import { PDFDocument, PDFHexString, rgb, BlendMode, LineCapStyle, type PDFPage } from 'pdf-lib'
 import type { PdfQuad, PdfRect } from './geometry'
 
 export type AnnotationType = 'highlight' | 'underline' | 'note' | 'ink' | 'signature'
@@ -82,29 +82,7 @@ function quadBounds(quad: PdfQuad): [number, number, number, number] {
   return [minX, minY, maxX, maxY]
 }
 
-function wrapText(text: string, maxChars: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean)
-  const lines: string[] = []
-  let current = ''
-  for (const word of words) {
-    if (!current) {
-      current = word
-    } else if (current.length + word.length + 1 <= maxChars) {
-      current += ` ${word}`
-    } else {
-      lines.push(current)
-      current = word
-    }
-    if (current.length > maxChars) {
-      lines.push(current.slice(0, maxChars))
-      current = ''
-    }
-  }
-  if (current) lines.push(current)
-  return lines.length ? lines : ['']
-}
-
-async function drawNote(page: PDFPage, annotation: NoteAnnotation, font: PDFFont): Promise<void> {
+async function drawNote(pdfDoc: PDFDocument, page: PDFPage, annotation: NoteAnnotation): Promise<void> {
   const [x0, y0, x1, y1] = annotation.rect
   const width = Math.max(14, x1 - x0)
   const height = Math.max(14, y1 - y0)
@@ -122,21 +100,20 @@ async function drawNote(page: PDFPage, annotation: NoteAnnotation, font: PDFFont
 
   if (!annotation.comment) return
 
-  const size = 9
-  const lineHeight = size * 1.25
-  const maxChars = Math.max(4, Math.floor((width - 8) / (size * 0.5)))
-  const lines = wrapText(annotation.comment, maxChars)
-  const maxLines = Math.max(1, Math.floor((height - 8) / lineHeight))
-  const shown = lines.slice(0, maxLines)
+  // The icon is visual; the entire comment belongs in an interoperable PDF
+  // Text annotation. The small marker cannot hold more than a few characters.
+  const noteRef = pdfDoc.context.register(pdfDoc.context.obj({
+    Type: 'Annot',
+    Subtype: 'Text',
+    Rect: [x0, y0, x1, y1],
+    Contents: PDFHexString.fromText(annotation.comment),
+    Name: 'Comment',
+    F: 4
+  }))
+  page.node.addAnnot(noteRef)
 
-  page.drawText(shown.join('\n'), {
-    x: x0 + 4,
-    y: y0 + height - size - 4,
-    size,
-    font,
-    color: rgb(0.12, 0.12, 0.12),
-    lineHeight
-  })
+  // Do not rasterize or truncate the comment inside its 22pt icon. PDF
+  // viewers can display the full Unicode text from the Text annotation.
 }
 
 async function drawSignature(
@@ -179,7 +156,6 @@ export async function exportAnnotatedPdf(
   const warnings: string[] = []
   const pdfDoc = await PDFDocument.load(original, { updateMetadata: false })
   const pages = pdfDoc.getPages()
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
   for (const annotation of annotations) {
     const page = pages[annotation.page]
@@ -221,7 +197,7 @@ export async function exportAnnotatedPdf(
           break
         }
         case 'note': {
-          await drawNote(page, annotation, font)
+          await drawNote(pdfDoc, page, annotation)
           break
         }
         case 'ink': {
@@ -254,19 +230,22 @@ export async function exportAnnotatedPdf(
       const form = pdfDoc.getForm()
       for (const entry of options.formValues) {
         try {
-          if (entry.type === 'text' && typeof entry.value === 'string') {
+          // PDF.js uses AcroForm names Tx/Btn/Ch, not pdf-lib's field names.
+          if ((entry.type === 'Tx' || entry.type === 'text') && typeof entry.value === 'string') {
             form.getTextField(entry.name).setText(entry.value)
-          } else if (entry.type === 'checkbox' && typeof entry.value === 'boolean') {
+          } else if ((entry.type === 'Btn' || entry.type === 'checkbox') && typeof entry.value === 'boolean') {
             const box = form.getCheckBox(entry.name)
             if (entry.value) box.check()
             else box.uncheck()
-          } else if (entry.type === 'radio' && typeof entry.value === 'string') {
+          } else if ((entry.type === 'Btn' || entry.type === 'radio') && typeof entry.value === 'string') {
             form.getRadioGroup(entry.name).select(entry.value)
-          } else if (entry.type === 'dropdown' && typeof entry.value === 'string') {
+          } else if ((entry.type === 'Ch' || entry.type === 'dropdown') && typeof entry.value === 'string') {
             form.getDropdown(entry.name).select(entry.value)
+          } else {
+            warnings.push(`Câmpul formularului „${entry.name}” are un tip neacceptat (${entry.type}).`)
           }
-        } catch {
-          /* field not writable in this document — skip silently */
+        } catch (error) {
+          warnings.push(`Câmpul „${entry.name}” nu a fost salvat: ${String(error)}`)
         }
       }
     } catch (error) {
