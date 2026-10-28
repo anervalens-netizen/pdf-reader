@@ -266,6 +266,8 @@ export async function exportAnnotatedPdf(
     try {
       const parsedFont = fontkit.create(options.unicodeFontBytes)
       const missingGlyphs = editedText.flatMap((field) => [...(field.value as string)])
+        // Newlines and tabs are layout separators, not printable glyphs.
+        .filter((char) => char !== '\n' && char !== '\r' && char !== '\t')
         .filter((char) => !parsedFont.hasGlyphForCodePoint(char.codePointAt(0)!))
       if (missingGlyphs.length > 0) {
         deferAppearancesToReader = true

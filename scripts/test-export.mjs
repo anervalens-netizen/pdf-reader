@@ -239,6 +239,28 @@ for (const unsupportedText of ['你好，世界', 'Salut 😀']) {
 }
 console.log('unsupported CJK/emoji values preserved with warning and NeedAppearances')
 
+// Newline characters are separators, not glyphs. A multiline Unicode text
+// field must still get a regenerated appearance without unsupported warnings.
+const multilineDoc = await PDFDocument.create()
+const multilinePage = multilineDoc.addPage([595, 842])
+const multiline = multilineDoc.getForm().createTextField('address')
+multiline.enableMultiline()
+multiline.addToPage(multilinePage, { x: 50, y: 600, width: 240, height: 80 })
+const multilineOriginal = await multilineDoc.save()
+const multilineText = 'café\nParis\r\nBucurești'
+const multilineResult = await exportAnnotatedPdf(multilineOriginal.buffer.slice(multilineOriginal.byteOffset, multilineOriginal.byteOffset + multilineOriginal.byteLength), [], {
+  formValues: [{ name: 'address', type: 'Tx', value: multilineText }],
+  unicodeFontBytes: unicodeBytes
+})
+if (multilineResult.warnings.length) failures.push('multiline form unexpected warning: ' + multilineResult.warnings.join(' | '))
+const multilineReloaded = await PDFDocument.load(multilineResult.data)
+if (multilineReloaded.getForm().getTextField('address').getText() !== multilineText) failures.push('multiline form value lost')
+const multilineAppearance = multilineReloaded.getForm().getTextField('address').acroField.getWidgets()[0].getAppearances()?.normal
+const multilineStream = multilineAppearance ? multilineReloaded.context.lookup(multilineAppearance, PDFRawStream) : null
+const multilineFonts = multilineStream?.dict.lookup(PDFName.of('Resources'), PDFDict)?.lookup(PDFName.of('Font'), PDFDict)
+if (!multilineFonts?.entries().some(([,ref]) => multilineReloaded.context.lookup(ref, PDFDict).get(PDFName.of('Subtype'))?.toString() === '/Type0')) failures.push('multiline Unicode appearance missing')
+console.log('multiline Unicode value + appearance preserved')
+
 // Round-trip: the exported file must be re-loadable and re-savable.
 const resaved = await reloaded.save()
 if (resaved.length === 0) failures.push('round-trip save produced an empty file')
