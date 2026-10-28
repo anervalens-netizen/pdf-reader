@@ -77,6 +77,12 @@ jobs:
   android:
     name: Android - APK
     runs-on: ubuntu-latest
+    env:
+      # Secretele nu pot fi folosite direct în condiții `if:`; sunt expuse
+      # ca variabile de mediu, iar pasul verifică dacă cheia există.
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -114,13 +120,12 @@ jobs:
 
       # Varianta semnată se construiește doar dacă există cheia în secrets.
       - name: Build APK semnat (release)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         working-directory: android
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "Fără cheie de semnare (ANDROID_KEYSTORE_BASE64) - se sare varianta de release."
+            exit 0
+          fi
           echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
           ./gradlew assembleRelease --no-daemon \
             -Pandroid.injected.signing.storeFile=keystore.jks \
@@ -129,7 +134,7 @@ jobs:
             -Pandroid.injected.signing.keyPassword="$KEYSTORE_PASSWORD"
 
       - uses: actions/upload-artifact@v4
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: always()
         with:
           name: pdf-android-release
           if-no-files-found: ignore

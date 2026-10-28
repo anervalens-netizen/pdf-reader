@@ -1,0 +1,20 @@
+# Normalizare: LF în repo și în working tree, pe toate platformele.
+* text=auto eol=lf
+
+# Scripturi de shell - LF obligatoriu, altfel bash nu le poate executa.
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Binare
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.jar binary
+*.keystore binary
+*.jks binary
+*.apk binary
+*.exe binary
+*.blockmap binary
