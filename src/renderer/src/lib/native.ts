@@ -23,8 +23,42 @@ interface NativeSaveResult {
   error?: string
 }
 
+interface NativeIncomingPdf {
+  available: boolean
+  fileName?: string
+  base64?: string
+}
+
 interface PdfFilesPlugin {
   savePdf(options: { fileName: string; base64: string }): Promise<NativeSaveResult>
+  getPendingPdf(): Promise<NativeIncomingPdf>
+  addListener(eventName: string, callback: (payload: NativeIncomingPdf & { message?: string }) => void): Promise<{ remove(): Promise<void> }>
+}
+
+/** Open PDFs shared by Android's system file manager (ACTION_VIEW). */
+export async function registerPdfIntentHandler(
+  onOpen: (file: File) => void,
+  onError: (message: string) => void
+): Promise<() => void> {
+  if (!isNativeShell()) return () => {}
+  const { registerPlugin } = await import('@capacitor/core')
+  const plugin = registerPlugin<PdfFilesPlugin>('PdfFiles')
+  const deliver = (payload: NativeIncomingPdf): void => {
+    if (!payload.available || !payload.base64) return
+    try {
+      const binary = atob(payload.base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      onOpen(new File([bytes], payload.fileName ?? 'document.pdf', { type: 'application/pdf' }))
+    } catch (error) {
+      onError('Importul PDF a eșuat: ' + String(error))
+    }
+  }
+  const opened = await plugin.addListener('pdfOpened', deliver)
+  const errors = await plugin.addListener('pdfOpenError', (event) => onError(event.message ?? 'PDF invalid'))
+  try { deliver(await plugin.getPendingPdf()) }
+  catch (error) { onError('Nu s-a putut deschide PDF-ul extern: ' + String(error)) }
+  return () => { void opened.remove(); void errors.remove() }
 }
 
 /** Save through Android's system document picker (SAF); no external-storage permission. */

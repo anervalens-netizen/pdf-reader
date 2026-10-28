@@ -124,6 +124,16 @@ build/        logo-ul vectorial și icoanele rasterizate
 Electron 45 · React 19 · TypeScript 7 · Vite 8 · PDF.js 6.4 · pdf-lib 1.17 ·
 Capacitor 8 · IndexedDB
 
+## Versiunea 1.0.2 — integritatea datelor și stabilitate
+
+- **IndexedDB**: confirmăm tranzacțiile numai la `oncomplete`. Eșecul stocării unui document nu mai este mascat; erorile la adnotări sunt afișate și recomandă salvarea unei copii PDF.
+- **Adnotări**: modificările rapide sunt serializate per document, evitând suprascrierea stării noi cu o versiune veche.
+- **Migrare**: la reimportul unui PDF identic păstrat în v1.0.0 sub cheia `web:<nume>`, sesiunile și adnotările sunt copiate către cheia SHA-256 fără ștergerea originalului. Fișierele diferite cu același nume nu sunt amestecate.
+- **Electron**: accesul la fișiere este permis numai după autorizarea implicită prin dialogul sistemului, deschiderea din sistemul de operare sau drag-and-drop. Permisiunile sunt păstrate într-un fișier local de metadate, fără a trimite documente pe server. Fișierele din „Recente” neautorizate anterior necesită reselectare.
+- **Performanță**: pagina și stratul text sunt demontate când sunt la distanță de viewport, fără a pierde sloturile necesare navigării. Un test de 140 de pagini a păstrat doar 3 canvas-uri active la finalul documentului.
+- **Android**: suport în cod pentru „Deschide cu” prin intentul `ACTION_VIEW` și `ContentResolver`. Importul extern prin bridge este limitat la 32 MB pentru a reduce riscul de epuizare a memoriei; nu înlocuiește testarea pe telefon fizic.
+- **QA**: teste de migrare a notițelor, două PDF-uri cu același nume, PDF deteriorat, document mare, plus test desktop pentru respingerea unei citiri neautorizate.
+
 ## Versiunea 1.0.1 — corecții și verificări
 
 - Android: salvarea PDF folosește selectorul nativ de documente (SAF), fără permisiuni largi de stocare.
@@ -145,8 +155,7 @@ Capacitor 8 · IndexedDB
   furnizor de release-uri. În repo sunt deja configurate release-urile GitHub.
 - **Formularele** se completează interactiv (PDF.js), iar valorile sunt exportate în copia
   rezultată pe câmpurile care pot fi scrise.
-- **Android**: documentele se deschid din selectorul de fișiere al aplicației. Deschiderea
-  directă din managerul de fișiere („Deschide cu → PDF") nu este încă legată.
+- **Android**: deschiderea din managerul de fișiere prin „Deschide cu” este implementată în 1.0.2, dar trebuie validată pe dispozitiv fizic; pentru fișiere externe peste 32 MB trebuie folosită o cale de import diferită.
 - **Android**: APK-ul din CI este semnat cu cheia de debug. Pentru un APK semnat cu o cheie
   personală, adaugă secretele `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` și
   `ANDROID_KEY_ALIAS` în repo — workflow-ul construiește automat și varianta de release.

@@ -1,6 +1,6 @@
 {
   "name": "pdf-reader",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "PDF — a calm, fast PDF reader for desktop",
   "main": "./out/main/index.js",
   "author": {

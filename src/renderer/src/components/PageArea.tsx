@@ -53,16 +53,21 @@ function PageSlot({
     if (!element) return
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setNear(true)
-          observer.disconnect()
-        }
+        // Unmount distant page canvas/text layers to bound memory on large PDFs.
+        setNear(entries.some((entry) => entry.isIntersecting))
       },
-      { root, rootMargin: '800px 0px' }
+      { root, rootMargin: '1000px 0px' }
     )
     observer.observe(element)
     return () => observer.disconnect()
   }, [root])
+
+  // Page navigation must target stable slot elements, even while the costly
+  // PageView/canvas is unmounted. Never unregister a slot on scroll.
+  useEffect(() => {
+    registerElement(pageNumber, hostRef.current)
+    return () => registerElement(pageNumber, null)
+  }, [pageNumber, registerElement])
 
   return (
     <div
@@ -85,7 +90,7 @@ function PageSlot({
           onRequestNote={onRequestNote}
           onPlaceSignature={onPlaceSignature}
           onVisible={onVisible}
-          registerElement={registerElement}
+          registerElement={() => { /* slot owns the stable navigation anchor */ }}
         />
       )}
     </div>

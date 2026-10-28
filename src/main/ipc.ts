@@ -2,6 +2,7 @@ import { app, dialog, ipcMain, shell } from 'electron'
 import { basename, dirname, extname } from 'node:path'
 import { getMainWindow } from './window'
 import { readBinary, writeBinary } from './store'
+import { authorizePdfPath, canReadPdfPath } from './pdfAccess'
 import type { OpenedFile, SaveResult } from '../shared/api'
 
 async function openFileAt(path: string): Promise<OpenedFile | null> {
@@ -31,12 +32,13 @@ export function registerIpcHandlers(): void {
       filters: [{ name: 'Document PDF', extensions: ['pdf'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return null
+    if (!authorizePdfPath(result.filePaths[0])) return null
     return openFileAt(result.filePaths[0])
   })
 
   ipcMain.handle('pdf:read-file', async (event, path: string): Promise<OpenedFile | null> => {
     // A compromised renderer must not be able to read arbitrary non-PDF files.
-    if (event.sender !== getMainWindow()?.webContents || typeof path !== 'string' || extname(path).toLowerCase() !== '.pdf') return null
+    if (event.sender !== getMainWindow()?.webContents || !canReadPdfPath(path)) return null
     return openFileAt(path)
   })
 
@@ -63,7 +65,7 @@ export function registerIpcHandlers(): void {
     'pdf:save-to',
     async (event, payload: { path: string; data: ArrayBuffer }): Promise<SaveResult> => {
       // Direct writes are reserved for explicit local QA capture, not normal PDFs.
-      if (!process.env.PDF_CAPTURE_DIR || event.sender !== getMainWindow()?.webContents || extname(payload.path).toLowerCase() !== '.pdf') {
+      if (!process.env.PDF_CAPTURE_DIR || event.sender !== getMainWindow()?.webContents || typeof payload?.path !== 'string' || extname(payload.path).toLowerCase() !== '.pdf' || !payload.path.startsWith(process.env.PDF_CAPTURE_DIR + '/')) {
         return { canceled: false, error: 'Salvarea directă nu este disponibilă.' }
       }
       try {

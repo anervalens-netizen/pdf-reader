@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
+import { authorizePdfPath } from './pdfAccess'
 import { app, type BrowserWindow } from 'electron'
 
 /**
@@ -40,6 +41,7 @@ export async function runCaptureSequence(
   await wait(2200)
   await capture('01-welcome')
 
+  authorizePdfPath(samplePdf)
   win.webContents.send('pdf:file-opened', { path: samplePdf, name: 'pdf-sample.pdf' })
 
   // Wait until the text layer is really in place before interacting with it.
@@ -118,6 +120,7 @@ export async function runCaptureSequence(
     await wait(300)
     win.webContents.send('pdf:menu-action', 'toggle-theme')
     await wait(600)
+    authorizePdfPath(annotated)
     win.webContents.send('pdf:file-opened', { path: annotated, name: 'pdf-annotated.pdf' })
     await wait(3200)
     await run(`(() => JSON.stringify({
@@ -145,6 +148,17 @@ export async function runCaptureSequence(
       true
     )
     console.log(`[capture] saveTo -> ${String(result)}`)
+  }
+
+  // A renderer must not read a valid PDF that the user never selected.
+  if (process.env.PDF_CAPTURE_DENIED_PDF) {
+    const candidate = process.env.PDF_CAPTURE_DENIED_PDF
+    const denied = await win.webContents.executeJavaScript(
+      `window.pdf.readFile(${JSON.stringify(candidate)}).then(file => file === null)`,
+      true
+    )
+    if (!denied) throw new Error('SECURITY FAILURE: unauthorized PDF was readable')
+    console.log('[capture] unauthorized PDF read refused')
   }
 
   app.exit(0)

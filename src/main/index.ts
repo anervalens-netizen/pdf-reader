@@ -6,6 +6,7 @@ import { createWindow, getMainWindow } from './window'
 import { buildApplicationMenu } from './menu'
 import { loadWindowState, saveWindowState } from './store'
 import { registerIpcHandlers } from './ipc'
+import { authorizePdfPath } from './pdfAccess'
 
 /** Files requested by the OS (double-click on a .pdf, "Open with", launch args). */
 const pendingOpens = new Set<string>()
@@ -63,6 +64,7 @@ async function openPathInApp(path: string): Promise<void> {
       })
       return
     }
+    if (!authorizePdfPath(path)) return
     pendingOpens.add(path)
     const win = getMainWindow()
     if (win && !win.isDestroyed()) {
@@ -101,10 +103,12 @@ app.whenReady().then(async () => {
     flushPendingOpens()
   })
 
-  ipcMain.on('pdf:file-dropped', (_event, path: string) => {
+  ipcMain.on('pdf:file-dropped', (event, path: string) => {
+    if (event.sender !== getMainWindow()?.webContents) return
     if (typeof path === 'string' && path) void openPathInApp(path)
   })
 
+  if (launchArg) authorizePdfPath(launchArg)
   const win = createWindow(loadWindowState())
   const { loadRenderer } = await import('./window')
   win.webContents.on('did-start-loading', () => { rendererReady = false })

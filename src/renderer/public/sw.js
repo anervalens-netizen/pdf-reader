@@ -6,7 +6,7 @@
  * served cache-first and stored on first use. That makes the reader usable
  * offline once it has been opened at least once.
  */
-const CACHE = 'pdf-shell-v1.0.1'
+const CACHE = 'pdf-shell-v1.0.2'
 const SHELL = ['./', './index.html', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
