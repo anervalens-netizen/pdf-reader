@@ -57,6 +57,7 @@ export function PageView({
   const spanMapRef = useRef<Map<Element, number>>(new Map())
   const inkPathRef = useRef<number[]>([])
   const [viewport, setViewport] = useState<PageViewport | null>(null)
+  const [printReady, setPrintReady] = useState(false)
   const [items, setItems] = useState<TextItemLike[]>([])
   const [styles, setStyles] = useState<Record<string, TextStyleLike>>({})
   const [, forceRender] = useState(0)
@@ -74,6 +75,7 @@ export function PageView({
     let page: PDFPageProxy | null = null
 
     const run = async (): Promise<void> => {
+      setPrintReady(false)
       page = await doc.getPage(pageNumber)
       if (cancelled) return
       const view = page.getViewport({ scale: zoom })
@@ -149,6 +151,7 @@ export function PageView({
           console.warn('[page] annotation layer failed', error)
         }
       }
+      if (!cancelled) setPrintReady(true)
     }
 
     void run().catch((error) => console.warn('[page] render failed', error))
@@ -379,6 +382,7 @@ export function PageView({
           : undefined
       }
       data-page={pageNumber}
+      data-print-ready={printReady ? 'true' : 'false'}
       onMouseUp={handleMouseUp}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

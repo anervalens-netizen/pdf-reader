@@ -72,6 +72,7 @@ export interface AppState {
   searching: boolean
   recents: db.RecentRecord[]
   saving: boolean
+  printing: boolean
   toasts: Toast[]
 }
 
@@ -98,6 +99,7 @@ const initialState: AppState = {
   searching: false,
   recents: [],
   saving: false,
+  printing: false,
   toasts: []
 }
 
@@ -125,6 +127,7 @@ type Action =
   | { type: 'search/progress'; searching: boolean }
   | { type: 'recents/set'; recents: db.RecentRecord[] }
   | { type: 'saving/set'; saving: boolean }
+  | { type: 'printing/set'; printing: boolean }
   | { type: 'toast/add'; toast: Toast }
   | { type: 'toast/remove'; id: string }
 
@@ -202,6 +205,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, recents: action.recents }
     case 'saving/set':
       return { ...state, saving: action.saving }
+    case 'printing/set':
+      return { ...state, printing: action.printing }
     case 'toast/add':
       return { ...state, toasts: [...state.toasts.slice(-3), action.toast] }
     case 'toast/remove':
@@ -247,6 +252,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const docRef = useRef<PDFDocumentProxy | null>(null)
   const dataRef = useRef<ArrayBuffer | null>(null)
   const searchToken = useRef(0)
+  const printInProgress = useRef(false)
+  // Increased before each document load/close, independent of search events.
+  const documentEpoch = useRef(0)
   const annotationsRef = useRef<Annotation[]>([])
   const annotationPathRef = useRef<string | null>(null)
   const annotationWritesRef = useRef<Map<string, Promise<void>>>(new Map())
@@ -312,7 +320,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const loadFile = useCallback(
     async (file: { path: string; name: string; size: number; data: ArrayBuffer }, password?: string) => {
-      // Invalidate any search that is still scanning the previous document.
+      // Cancel in-flight print preparation and searches before replacing PDF.
+      documentEpoch.current += 1
       searchToken.current += 1
       dispatch({ type: 'file/loading' })
       try {
@@ -338,6 +347,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           outline = null
         }
 
+        // Drain queued writes before reading; otherwise an older snapshot can
+        // overwrite edits made just before reopening this document.
+        const pendingAnnotations = annotationWritesRef.current.get(file.path)
+        if (pendingAnnotations) await pendingAnnotations
         const stored = (await db.getAnnotations(file.path)) as Annotation[] | undefined
         annotationPathRef.current = file.path
         annotationsRef.current = stored ?? []
@@ -412,6 +425,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   )
 
   const closeDocument = useCallback(() => {
+    documentEpoch.current += 1
     searchToken.current += 1
     void docRef.current?.cleanup()
     docRef.current = null
@@ -594,10 +608,44 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   }, [state.file, state.annotations, collectFormValues, toast, refreshRecents])
 
   const print = useCallback(() => {
-    // Printing uses the browser print pipeline: the print stylesheet hides the
-    // application chrome and lays the rendered pages out one per sheet.
-    window.print()
-  }, [])
+    if (!docRef.current || printInProgress.current) return
+    // A long document must never silently print blank distant pages or
+    // exhaust memory by forcing hundreds of full-resolution canvases.
+    if (state.numPages > 35) {
+      toast('Pentru mai mult de 35 de pagini, salvează PDF-ul și tipărește din cititorul sistemului.', 'info')
+      return
+    }
+    const requestedDocument = docRef.current
+    const requestedEpoch = documentEpoch.current
+    printInProgress.current = true
+    dispatch({ type: 'printing/set', printing: true })
+    void (async () => {
+      const limit = Date.now() + 25000
+      while (Date.now() < limit) {
+        if (docRef.current !== requestedDocument || documentEpoch.current !== requestedEpoch || state.status !== 'ready') {
+          throw new Error('Documentul s-a schimbat în timpul pregătirii tipăririi.')
+        }
+        const pages = document.querySelectorAll('.page-slot .page[data-print-ready="true"]').length
+        if (pages === state.numPages) {
+          // Print only after all page render tasks and annotation layers finish.
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+          if (docRef.current !== requestedDocument || documentEpoch.current !== requestedEpoch) {
+            throw new Error('Documentul s-a schimbat înainte de imprimare.')
+          }
+          window.print()
+          return
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 100))
+      }
+      throw new Error('Unele pagini nu au putut fi pregătite pentru tipărire.')
+    })().catch((error) => {
+      console.error('[print] page preparation failed', error)
+      toast('Tipărirea a fost anulată: ' + String(error), 'error')
+    }).finally(() => {
+      printInProgress.current = false
+      dispatch({ type: 'printing/set', printing: false })
+    })
+  }, [state.numPages, state.status, toast])
 
   // Persist the reading session (page + zoom) for the next launch.
   useEffect(() => {

@@ -124,6 +124,19 @@ build/        logo-ul vectorial și icoanele rasterizate
 Electron 45 · React 19 · TypeScript 7 · Vite 8 · PDF.js 6.4 · pdf-lib 1.17 ·
 Capacitor 8 · IndexedDB
 
+## Versiunea 1.0.3 — remedierea observațiilor Codex
+
+Au fost citite review-urile automate din PR #1 și PR #2; corecțiile acestei versiuni țintesc defectele reproductibile identificate de Codex:
+
+- Desktop: copiile salvate prin dialog sunt autorizate pentru redeschidere din „Recente”.
+- IndexedDB: o listă de adnotări golită intenționat nu este repopulată din metadatele vechi; deschiderea așteaptă scrierile locale încă în curs înainte de citirea adnotărilor.
+- Print: pentru maximum 35 de pagini, sunt montate și randate toate paginile înainte de apelarea dialogului; documentele mai mari cer salvarea unei copii și tipărirea din cititorul sistemului, în loc să printeze pagini goale. Pipeline-ul de tipărire rămâne dependent de zoom și va fi reproiectat în 1.1.0.
+- Android: salvarea prin Storage Access Framework se execută în fir de fundal pentru a nu bloca interfața la furnizori de fișiere lenți.
+- PWA: navigația cu HTTP 503 folosește interfața offline deja memorată în cache, cu test de regresie.
+- Dependențe: `uuid` transitive actualizat prin override la ramura reparată 11.1.1+, cu audit npm curat.
+
+Review-ul privind aparența vizuală Unicode a formularelor **nu este încă închis complet**. Valoarea este păstrată în PDF și există avertizare, dar pentru afișarea corectă în orice cititor trebuie folosit un font Unicode în aparențele formularului.
+
 ## Versiunea 1.0.2 — integritatea datelor și stabilitate
 
 - **IndexedDB**: confirmăm tranzacțiile numai la `oncomplete`. Eșecul stocării unui document nu mai este mascat; erorile la adnotări sunt afișate și recomandă salvarea unei copii PDF.

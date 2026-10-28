@@ -54,6 +54,9 @@ export function registerIpcHandlers(): void {
       if (result.canceled || !result.filePath) return { canceled: true }
       try {
         await writeBinary(result.filePath, options.data)
+        if (!authorizePdfPath(result.filePath)) {
+          return { canceled: false, error: 'Copia a fost salvată, dar accesul din Recente nu a putut fi autorizat.' }
+        }
         return { path: result.filePath, canceled: false }
       } catch (error) {
         return { canceled: false, error: String(error) }

@@ -123,20 +123,26 @@ public class PdfFilesPlugin extends Plugin {
             return;
         }
 
-        Uri uri = result.getData().getData();
-        try {
-            String payload = call.getString("base64");
-            byte[] bytes = Base64.decode(payload, Base64.DEFAULT);
-            try (OutputStream stream = getContext().getContentResolver().openOutputStream(uri, "w")) {
-                if (stream == null) throw new java.io.IOException("Cannot open destination");
-                stream.write(bytes);
-                stream.flush();
+        final Uri uri = result.getData().getData();
+        // SAF providers (including cloud storage) can block for seconds.
+        // Never decode or write the PDF on Android's activity-result UI thread.
+        new Thread(() -> {
+            try {
+                String payload = call.getString("base64");
+                if (payload == null) throw new java.io.IOException("Missing PDF content");
+                byte[] bytes = Base64.decode(payload, Base64.DEFAULT);
+                try (OutputStream stream = getContext().getContentResolver().openOutputStream(uri, "w")) {
+                    if (stream == null) throw new java.io.IOException("Cannot open destination");
+                    stream.write(bytes);
+                    stream.flush();
+                }
+                JSObject saved = new JSObject();
+                saved.put("canceled", false);
+                saved.put("path", uri.toString());
+                call.resolve(saved);
+            } catch (Exception error) {
+                call.reject("Could not save PDF", error);
             }
-            response.put("canceled", false);
-            response.put("path", uri.toString());
-            call.resolve(response);
-        } catch (Exception error) {
-            call.reject("Could not save PDF", error);
-        }
+        }, "pdf-saf-save").start();
     }
 }

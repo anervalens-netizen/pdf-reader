@@ -299,13 +299,11 @@ export default function App(): JSX.Element {
   // --- Printing -------------------------------------------------------------
   useEffect(() => {
     const handler = (): void => {
-      // Chromium prints the document view; the print stylesheet removes the
-      // application chrome and breaks every page onto its own sheet.
-      window.print()
+      print()
     }
     window.addEventListener('pdf:print', handler)
     return () => window.removeEventListener('pdf:print', handler)
-  }, [])
+  }, [print])
 
   // --- Note dialog ----------------------------------------------------------
   useEffect(() => {
