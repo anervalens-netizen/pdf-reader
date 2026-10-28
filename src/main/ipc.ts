@@ -1,5 +1,5 @@
 import { app, dialog, ipcMain, shell } from 'electron'
-import { basename, dirname, extname } from 'node:path'
+import { basename, dirname, extname, resolve, sep } from 'node:path'
 import { getMainWindow } from './window'
 import { readBinary, writeBinary } from './store'
 import { authorizePdfPath, canReadPdfPath } from './pdfAccess'
@@ -65,7 +65,7 @@ export function registerIpcHandlers(): void {
     'pdf:save-to',
     async (event, payload: { path: string; data: ArrayBuffer }): Promise<SaveResult> => {
       // Direct writes are reserved for explicit local QA capture, not normal PDFs.
-      if (!process.env.PDF_CAPTURE_DIR || event.sender !== getMainWindow()?.webContents || typeof payload?.path !== 'string' || extname(payload.path).toLowerCase() !== '.pdf' || !payload.path.startsWith(process.env.PDF_CAPTURE_DIR + '/')) {
+      if (!process.env.PDF_CAPTURE_DIR || event.sender !== getMainWindow()?.webContents || typeof payload?.path !== 'string' || extname(payload.path).toLowerCase() !== '.pdf' || !resolve(payload.path).startsWith(resolve(process.env.PDF_CAPTURE_DIR) + sep)) {
         return { canceled: false, error: 'Salvarea directă nu este disponibilă.' }
       }
       try {

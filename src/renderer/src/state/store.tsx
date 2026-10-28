@@ -374,10 +374,15 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   )
 
   const openDialog = useCallback(async () => {
-    const file = await api.openDialog()
-    if (!file) return
-    await loadFile(file)
-  }, [loadFile])
+    try {
+      const file = await api.openDialog()
+      if (!file) return
+      await loadFile(file)
+    } catch (error) {
+      console.error('[open] document storage failed', error)
+      toast('Documentul nu a putut fi stocat local. Verifică spațiul disponibil sau permisiunile.', 'error')
+    }
+  }, [loadFile, toast])
 
   const openPath = useCallback(
     async (path: string, password?: string) => {
