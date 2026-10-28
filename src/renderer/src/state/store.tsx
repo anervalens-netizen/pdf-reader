@@ -619,6 +619,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     const epoch = documentEpoch.current
     dispatch({ type: 'saving/set', saving: true })
     try {
+      // Browsers require transient user activation to open a file picker.
+      // Call it directly from the initiating click, before ANY async PDF work.
+      const mergeFile = operation === 'merge' ? await api.openDialog() : null
+      if (operation === 'merge' && !mergeFile) return false
       const pending = annotationWritesRef.current.get(file.path)
       if (pending) await pending
       const values = await collectFormValues()
@@ -645,9 +649,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         const data = await extractPdfPages(prepared.data, pages)
         complete = await save(data, `${base}-extras.pdf`)
       } else if (operation === 'merge') {
-        const another = await api.openDialog()
-        if (!another) return false
-        const data = await mergePdfDocuments([prepared.data, another.data])
+        if (!mergeFile) return false
+        const data = await mergePdfDocuments([prepared.data, mergeFile.data])
         complete = await save(data, `${base}-combinat.pdf`)
       } else if (operation === 'split') {
         const afterPage = Number(selection.trim())

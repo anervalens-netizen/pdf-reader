@@ -277,6 +277,40 @@ async function main() {
     savedCopy.getPages().every((page) => page.getRotation().angle === 0))
   console.log('[qa-web] Salvează o copie după deschiderea în PDF.js:', saveCopyWorked)
 
+  // Codex PR #4: the second PDF picker must be invoked synchronously from
+  // the merge action click, before awaited annotation/form processing.
+  await win.webContents.executeJavaScript(`(() => {
+    document.querySelector('button[aria-label="Operații pagini"]')?.click()
+  })()`, true)
+  await delay(120)
+  await win.webContents.executeJavaScript(`(() => {
+    const select=document.querySelector('#pdf-page-operation')
+    const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set
+    setter.call(select,'merge')
+    select.dispatchEvent(new Event('change',{bubbles:true}))
+  })()`, true)
+  await delay(120)
+  const mergePickerImmediate = await win.webContents.executeJavaScript(`(() => {
+    let invoked=false
+    const original=HTMLInputElement.prototype.click
+    HTMLInputElement.prototype.click=function(){
+      if (this.type==='file') {
+        invoked=true
+        const element=this
+        queueMicrotask(()=>element.dispatchEvent(new Event('cancel')))
+      } else original.call(this)
+    }
+    try {
+      const button=[...document.querySelectorAll('[role=dialog] button')]
+        .find(b=>b.textContent?.includes('Continuă și salvează'))
+      button?.click()
+    } finally {
+      HTMLInputElement.prototype.click=original
+    }
+    return invoked
+  })()`, true)
+  console.log('[qa-web] selector combinare lansat sincron:', mergePickerImmediate)
+
   // Codex P2 regression: an explicitly empty destination means the user
   // cleared annotations. A subsequent import must NOT restore legacy notes.
   await win.webContents.executeJavaScript(`(async () => {
@@ -468,7 +502,7 @@ async function main() {
   const racePrevented = await win.webContents.executeJavaScript('window.__racePrinted === false', true)
   console.log('[qa-web] schimbare document anulează imprimarea:', racePrevented)
 
-  const ok = saveCopyWorked && pageToolsWorked && printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
+  const ok = mergePickerImmediate && saveCopyWorked && pageToolsWorked && printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
     uniqueRecents === 2 && invalidHandled && legacyMigration && emptyMigrationPreserved &&
     longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20 && racePrevented
   console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')
