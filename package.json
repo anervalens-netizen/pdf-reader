@@ -1,6 +1,6 @@
 {
   "name": "pdf-reader",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "PDF — a calm, fast PDF reader for desktop",
   "main": "./out/main/index.js",
   "author": {
@@ -26,6 +26,7 @@
     "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never --config electron-builder.yml",
     "test:export": "node scripts/make-sample-pdf.mjs && node scripts/test-export.mjs",
     "test:sw": "node scripts/test-sw.cjs",
+    "test:pages": "node scripts/test-page-tools.mjs",
     "test:web": "node scripts/make-sample-pdf.mjs && npm run build:web && electron scripts/qa-web.cjs"
   },
   "dependencies": {

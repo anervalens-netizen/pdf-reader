@@ -13,6 +13,7 @@ import * as db from '../lib/db'
 import { fileToRecord } from '../lib/webApi'
 import { loadDocument, type PDFDocumentProxy } from '../lib/pdf'
 import { buildPageIndex, findMatches } from '../lib/textIndex'
+import { extractPdfPages, mergePdfDocuments, parsePageRange, rotatePdfPage, splitPdfAt } from '../lib/pageTools'
 import type { TextItemLike } from '../lib/geometry'
 import {
   createId,
@@ -24,6 +25,7 @@ export type Theme = 'light' | 'dark' | 'system'
 export type Tool = 'select' | 'highlight' | 'underline' | 'note' | 'draw' | 'signature'
 export type SidebarTab = 'thumbnails' | 'outline'
 export type ZoomMode = 'custom' | 'fit-width' | 'fit-page'
+export type PageOperation = 'rotate' | 'extract' | 'merge' | 'split'
 
 export interface FileRef {
   path: string
@@ -242,6 +244,7 @@ export interface AppContextValue {
   goToHit: (delta: number) => void
   jumpToHit: (index: number) => void
   saveCopy: () => Promise<void>
+  pageOperation: (operation: PageOperation, selection?: string) => Promise<boolean>
   print: () => void
 }
 
@@ -325,7 +328,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       searchToken.current += 1
       dispatch({ type: 'file/loading' })
       try {
-        const doc = await loadDocument(file.data, { password })
+        // PDF.js transfers its input ArrayBuffer to the worker, detaching it.
+        // Keep the original bytes intact for Save Copy and page operations.
+        const doc = await loadDocument(file.data.slice(0), { password })
         const oldDocument = docRef.current
         docRef.current = doc
         if (oldDocument && oldDocument !== doc) void oldDocument.cleanup()
@@ -607,6 +612,80 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     }
   }, [state.file, state.annotations, collectFormValues, toast, refreshRecents])
 
+  const pageOperation = useCallback(async (operation: PageOperation, selection = ''): Promise<boolean> => {
+    const file = state.file
+    const source = dataRef.current
+    if (!file || !source || state.saving) return false
+    const epoch = documentEpoch.current
+    dispatch({ type: 'saving/set', saving: true })
+    try {
+      // Browsers require transient user activation to open a file picker.
+      // Call it directly from the initiating click, before ANY async PDF work.
+      const mergeFile = operation === 'merge' ? await api.openDialog() : null
+      if (operation === 'merge' && !mergeFile) return false
+      const pending = annotationWritesRef.current.get(file.path)
+      if (pending) await pending
+      const values = await collectFormValues()
+      if (documentEpoch.current !== epoch) throw new Error('Documentul s-a schimbat în timpul operației.')
+      const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
+      const prepared = await exportAnnotatedPdf(source, annotations, { formValues: values })
+      const base = file.name.replace(/\.pdf$/i, '')
+      const save = async (data: ArrayBuffer, name: string): Promise<boolean> => {
+        const saved = await api.saveFile({ defaultName: name, data, title: 'Salvează un PDF nou' })
+        if (saved.error) throw new Error(saved.error)
+        if (saved.canceled) return false
+        if (saved.path && api.platform() !== 'unknown') {
+          await db.touchRecent({ path: saved.path, name, size: data.byteLength })
+          await refreshRecents()
+        }
+        return true
+      }
+      let complete = false
+      if (operation === 'rotate') {
+        const data = await rotatePdfPage(prepared.data, state.page)
+        complete = await save(data, `${base}-rotit-p${state.page}.pdf`)
+      } else if (operation === 'extract') {
+        const pages = parsePageRange(selection, state.numPages)
+        const data = await extractPdfPages(prepared.data, pages)
+        complete = await save(data, `${base}-extras.pdf`)
+      } else if (operation === 'merge') {
+        if (!mergeFile) return false
+        const data = await mergePdfDocuments([prepared.data, mergeFile.data])
+        complete = await save(data, `${base}-combinat.pdf`)
+      } else if (operation === 'split') {
+        const afterPage = Number(selection.trim())
+        const [left, right] = await splitPdfAt(prepared.data, afterPage)
+        const first = await save(left, `${base}-partea-1.pdf`)
+        if (!first) return false
+        try {
+          const second = await save(right, `${base}-partea-2.pdf`)
+          if (!second) {
+            toast('Prima parte a fost salvată. A doua parte a fost anulată.', 'info')
+            return false
+          }
+          complete = true
+        } catch (error) {
+          toast('Prima parte a fost salvată, dar a doua a eșuat: ' + String(error), 'error')
+          return false
+        }
+      }
+      if (complete) {
+        if (prepared.warnings.length) {
+          toast('PDF salvat. Verifică avertizările pentru formulare și semnăturile digitale.', 'info')
+        } else {
+          toast('PDF nou salvat. Originalul nu a fost modificat.', 'success')
+        }
+      }
+      return complete
+    } catch (error) {
+      console.error('[page-tools] failed', error)
+      toast('Operația pe pagini a eșuat: ' + String(error), 'error')
+      return false
+    } finally {
+      dispatch({ type: 'saving/set', saving: false })
+    }
+  }, [state.file, state.page, state.numPages, state.annotations, state.saving, collectFormValues, refreshRecents, toast])
+
   const print = useCallback(() => {
     if (!docRef.current || printInProgress.current) return
     // A long document must never silently print blank distant pages or
@@ -690,6 +769,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       goToHit,
       jumpToHit,
       saveCopy,
+      pageOperation,
       print
     }),
     [
@@ -712,6 +792,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       goToHit,
       jumpToHit,
       saveCopy,
+      pageOperation,
       print
     ]
   )

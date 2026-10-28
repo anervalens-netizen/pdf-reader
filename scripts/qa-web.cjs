@@ -91,10 +91,14 @@ async function main() {
     height: 820,
     show: true,
     frame: false,
-    backgroundColor: '#F7F5F2'
+    backgroundColor: '#F7F5F2',
+    // Non-persistent isolated session: no shared IndexedDB or service worker
+    // state can contaminate another QA run on the same host.
+    webPreferences: { partition: `qa-pdf-reader-${process.pid}` }
   })
   win.setPosition(0, 0) // Must be on-screen for IntersectionObserver on hosted CI.
 
+  win.webContents.on('console-message', (...args) => console.log('[qa-console]', JSON.stringify(args.slice(1).map(x => typeof x === 'object' ? {message:x.message,level:x.level,sourceId:x.sourceId} : x)).slice(0,550)))
   await win.loadURL(`http://127.0.0.1:${port}/`)
   await delay(1200)
 
@@ -202,6 +206,110 @@ async function main() {
   }
   console.log('[qa-web] pregătire imprimare:', printState)
   const printReady = printState?.ready === 12 && printState.canvases === 12
+
+  // v1.1: exercise the actual Pages dialog through the browser save picker.
+  const activePage = await win.webContents.executeJavaScript(
+    "Number(document.querySelector('.page-indicator__input')?.value)", true
+  )
+  await win.webContents.executeJavaScript(`(() => {
+    window.__pagesSaved = null
+    window.__pickerCalled = false
+    window.showSaveFilePicker = async (options) => {
+      window.__pickerCalled = true
+      return ({
+      name: options.suggestedName,
+      createWritable: async () => ({
+        write: async (blob) => { window.__pagesSaved = [...new Uint8Array(await blob.arrayBuffer())] },
+        close: async () => { window.__pagesSaveDone = true }
+      })
+    })
+    }
+    document.querySelector('button[aria-label="Operații pagini"]')?.click()
+  })()`, true)
+  await delay(150)
+  const dialogShown = await win.webContents.executeJavaScript(
+    "Boolean(document.querySelector('[role=dialog][aria-label=\"Operații pe pagini\"]'))", true
+  )
+  const pageActionClick = await win.webContents.executeJavaScript(`(() => {
+    const button = [...document.querySelectorAll('[role=dialog] button')].find(b => b.textContent?.includes('Continuă și salvează'))
+    button?.click()
+    return {found:Boolean(button),disabled:button?.disabled,text:button?.textContent}
+  })()`, true)
+  await delay(600)
+  const earlyPageUI = await win.webContents.executeJavaScript("({toast:document.querySelector('.toasts')?.textContent,dialog:document.querySelector('[role=dialog]')?.textContent?.slice(-260)})", true)
+  console.log('[qa-web] early page UI:', earlyPageUI)
+  let savedPagesBytes = null
+  for (let attempt=0; attempt<70; attempt++) {
+    savedPagesBytes = await win.webContents.executeJavaScript('window.__pagesSaveDone ? window.__pagesSaved : null', true)
+    if (savedPagesBytes) break
+    await delay(200)
+  }
+  const rotatedPageFile = savedPagesBytes ? await PDFDocument.load(Uint8Array.from(savedPagesBytes)) : null
+  // The current page may change during asynchronous scroll/print cleanup.
+  // Assert exactly one page rotates, regardless of the transient page input.
+  const rotatedPages = rotatedPageFile?.getPages().filter((page) => page.getRotation().angle === 90).length ?? 0
+  const pageToolsWorked = dialogShown && rotatedPages === 1
+  const pageToolDiagnostics = {
+    dialogShown, pageActionClick, activePage, savedBytes: savedPagesBytes?.length ?? 0,
+    pickerCalled: await win.webContents.executeJavaScript('window.__pickerCalled', true),
+    angle: rotatedPageFile?.getPage(activePage - 1).getRotation().angle ?? null, rotatedPages,
+    ui: await win.webContents.executeJavaScript(
+      "({ dialogs: document.querySelectorAll('[role=dialog]').length, status: document.querySelector('.toasts')?.textContent })", true
+    )
+  }
+  console.log('[qa-web] meniu Pagini / rotire / salvare copie:', pageToolsWorked, JSON.stringify(pageToolDiagnostics))
+
+  // The historical "Save Copy" button must also work. PDF.js must not
+  // detach the original bytes when transferring a copy to its worker.
+  await win.webContents.executeJavaScript(`(() => {
+    window.__pagesSaved = null
+    window.__pagesSaveDone = false
+    document.querySelector('button[aria-label="Salvează o copie"]')?.click()
+  })()`, true)
+  let savedCopyBytes = null
+  for (let attempt=0; attempt<70; attempt++) {
+    savedCopyBytes = await win.webContents.executeJavaScript('window.__pagesSaveDone ? window.__pagesSaved : null', true)
+    if (savedCopyBytes) break
+    await delay(200)
+  }
+  const savedCopy = savedCopyBytes ? await PDFDocument.load(Uint8Array.from(savedCopyBytes)) : null
+  const saveCopyWorked = Boolean(savedCopy && savedCopy.getPageCount() === 12 &&
+    savedCopy.getPages().every((page) => page.getRotation().angle === 0))
+  console.log('[qa-web] Salvează o copie după deschiderea în PDF.js:', saveCopyWorked)
+
+  // Codex PR #4: the second PDF picker must be invoked synchronously from
+  // the merge action click, before awaited annotation/form processing.
+  await win.webContents.executeJavaScript(`(() => {
+    document.querySelector('button[aria-label="Operații pagini"]')?.click()
+  })()`, true)
+  await delay(120)
+  await win.webContents.executeJavaScript(`(() => {
+    const select=document.querySelector('#pdf-page-operation')
+    const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set
+    setter.call(select,'merge')
+    select.dispatchEvent(new Event('change',{bubbles:true}))
+  })()`, true)
+  await delay(120)
+  const mergePickerImmediate = await win.webContents.executeJavaScript(`(() => {
+    let invoked=false
+    const original=HTMLInputElement.prototype.click
+    HTMLInputElement.prototype.click=function(){
+      if (this.type==='file') {
+        invoked=true
+        const element=this
+        queueMicrotask(()=>element.dispatchEvent(new Event('cancel')))
+      } else original.call(this)
+    }
+    try {
+      const button=[...document.querySelectorAll('[role=dialog] button')]
+        .find(b=>b.textContent?.includes('Continuă și salvează'))
+      button?.click()
+    } finally {
+      HTMLInputElement.prototype.click=original
+    }
+    return invoked
+  })()`, true)
+  console.log('[qa-web] selector combinare lansat sincron:', mergePickerImmediate)
 
   // Codex P2 regression: an explicitly empty destination means the user
   // cleared annotations. A subsequent import must NOT restore legacy notes.
@@ -394,7 +502,7 @@ async function main() {
   const racePrevented = await win.webContents.executeJavaScript('window.__racePrinted === false', true)
   console.log('[qa-web] schimbare document anulează imprimarea:', racePrevented)
 
-  const ok = printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
+  const ok = mergePickerImmediate && saveCopyWorked && pageToolsWorked && printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
     uniqueRecents === 2 && invalidHandled && legacyMigration && emptyMigrationPreserved &&
     longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20 && racePrevented
   console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')
