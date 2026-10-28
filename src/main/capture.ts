@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { app, type BrowserWindow } from 'electron'
 
 /**
@@ -11,6 +11,8 @@ export async function runCaptureSequence(
 ): Promise<void> {
   const dir = process.env.PDF_CAPTURE_DIR
   if (!dir) return
+
+  await mkdir(dir, { recursive: true })
 
   const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
