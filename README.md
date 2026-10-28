@@ -73,6 +73,7 @@ npm run build       # build de producție Electron în out/
 ```bash
 npm run icons          # regenerează logo-ul și toate icoanele (desktop, PWA, Android)
 npm run test:export    # test end-to-end pentru exportul de adnotări
+npm run test:web       # QA end-to-end pentru build-ul web (randare + recente)
 node scripts/make-sample-pdf.mjs   # creează samples/pdf-sample.pdf (12 pagini)
 ```
 
