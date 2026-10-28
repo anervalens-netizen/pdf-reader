@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="PDF">
+  <defs>
+    <linearGradient id="pageFill" x1="0.05" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#F45A4C"/>
+      <stop offset="0.5" stop-color="#E03027"/>
+      <stop offset="1" stop-color="#CE251C"/>
+    </linearGradient>
+    <linearGradient id="flapFill" x1="0" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#9E1409"/>
+      <stop offset="1" stop-color="#6E0A05"/>
+    </linearGradient>
+    <linearGradient id="topSheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="0.3" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="0.65" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bottomShade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A0703" stop-opacity="0"/>
+      <stop offset="1" stop-color="#3A0703" stop-opacity="0.16"/>
+    </linearGradient>
+    <!-- Soft shadow cast by the folded flap onto the sheet. -->
+    <linearGradient id="foldShade" gradientUnits="userSpaceOnUse" x1="286" y1="48" x2="314" y2="76">
+      <stop offset="0" stop-color="#5A0C05" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#5A0C05" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <defs>
+    <path id="sheet" d="M132 48 H286 L404 166 V440 A24 24 0 0 1 380 464 H132 A24 24 0 0 1 108 440 V72 A24 24 0 0 1 132 48 Z"/>
+  </defs>
+
+  <!-- Page body: a sheet whose top-right corner is folded over. -->
+  <use href="#sheet" fill="url(#pageFill)"/>
+  <use href="#sheet" fill="url(#topSheen)"/>
+  <use href="#sheet" fill="url(#bottomShade)"/>
+  <use href="#sheet" fill="url(#foldShade)"/>
+
+  <!-- The folded-over flap (the back side of the paper). -->
+  <path d="M286 48 H380 A24 24 0 0 1 404 72 V166 Z" fill="url(#flapFill)"/>
+
+  <!-- Crease: a restrained light edge along the fold. -->
+  <path d="M286 48 L404 166" fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Faint content lines: the sheet reads as a document, not a plain slab. -->
+  <g fill="#FFFFFF" fill-opacity="0.28">
+    <rect x="156" y="230" width="200" height="12" rx="6"/>
+    <rect x="156" y="270" width="140" height="12" rx="6"/>
+  </g>
+
+  <!-- Wordmark. -->
+  <text x="256" y="382" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif"
+        font-size="104" font-weight="800" letter-spacing="3"
+        fill="#FFFFFF">PDF</text>
+</svg>

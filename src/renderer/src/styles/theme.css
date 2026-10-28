@@ -1,0 +1,85 @@
+:root {
+  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', ui-monospace, monospace;
+
+  --titlebar-h: 44px;
+  --toolbar-h: 48px;
+  --status-h: 28px;
+  --sidebar-w: 208px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur: 140ms;
+
+  --accent: #b4532a;
+  --accent-hover: #9c4522;
+  --accent-soft: #f3e5dd;
+  --accent-contrast: #ffffff;
+
+  --hl-yellow: #ffd94a;
+  --hl-green: #7ee08a;
+  --hl-blue: #74c0fc;
+  --hl-pink: #ffa8c5;
+  --search-hit: #66a3ff;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f7f5f2;
+  --bg-elevated: #fffdfb;
+  --surface: #ffffff;
+  --surface-2: #f1ede8;
+  --surface-3: #e9e4dd;
+  --canvas: #e8e4de;
+
+  --border: #e4dfd6;
+  --border-strong: #d2cbbf;
+
+  --text: #23221f;
+  --text-muted: #6f6a61;
+  --text-faint: #9b958b;
+
+  --shadow-sm: 0 1px 2px rgba(40, 32, 24, 0.06), 0 1px 1px rgba(40, 32, 24, 0.04);
+  --shadow-md: 0 2px 6px rgba(40, 32, 24, 0.08), 0 8px 24px rgba(40, 32, 24, 0.08);
+  --shadow-page: 0 1px 2px rgba(40, 32, 24, 0.12), 0 10px 28px rgba(40, 32, 24, 0.1);
+
+  --accent-soft: #f4e7e0;
+  --accent-contrast: #ffffff;
+  --danger: #b3392f;
+  --danger-soft: #f8e4e2;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #131312;
+  --bg-elevated: #191918;
+  --surface: #1d1d1b;
+  --surface-2: #242422;
+  --surface-3: #2c2c29;
+  --canvas: #0e0e0d;
+
+  --border: #2b2b28;
+  --border-strong: #3b3b37;
+
+  --text: #e9e6e0;
+  --text-muted: #9d978d;
+  --text-faint: #6d6862;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.55), 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow-page: 0 1px 2px rgba(0, 0, 0, 0.6), 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  --accent: #e08a5b;
+  --accent-hover: #ef9a6d;
+  --accent-soft: #3a2a20;
+  --accent-contrast: #20140d;
+  --danger: #e07a70;
+  --danger-soft: #3a2220;
+}

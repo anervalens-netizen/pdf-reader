@@ -1,0 +1,38 @@
+{
+  "name": "pdf-reader",
+  "version": "1.0.0",
+  "description": "PDF — a calm, fast PDF reader for desktop",
+  "main": "./out/main/index.js",
+  "author": "Andrei Stancu",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "icons": "electron scripts/render-logo.cjs",
+    "pack:win": "npm run build && electron-builder --win --dir --config electron-builder.yml",
+    "dist:win": "npm run build && electron-builder --win nsis --config electron-builder.yml",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb --config electron-builder.yml",
+    "test:export": "node scripts/test-export.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.4.299",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0",
+    "electron-vite": "6.0.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}
