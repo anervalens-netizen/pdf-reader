@@ -5,16 +5,20 @@
 </div>
 
 Aplicația se numește pur și simplu **PDF** — un tool personal, fără branding.
-Un singur renderer (React + PDF.js) rulează pe trei ținte:
+Un singur renderer (React + PDF.js) este folosit pe următoarele ținte:
 
 | Țintă | Formă | Status |
 | --- | --- | --- |
-| **Windows** | instalator NSIS (`PDF-Setup-1.0.0.exe`) | gata |
-| **Linux** | AppImage + `deb` | gata |
-| **Android** | APK (Capacitor) + PWA instalabilă | gata |
+| **Windows** | instalator NSIS (`PDF-Setup-1.1.1.exe`) | distribuit; testarea instalării native este în curs |
+| **Linux** | AppImage + `deb` | pachetul `deb` 1.1.1 instalat și testat pe Dell |
+| **Android** | APK semnat (Capacitor) + PWA instalabilă | APK 1.1.1 instalat și testat pe OnePlus 6T |
 | **Web** | PWA instalabilă, funcționează offline | gata |
 
 Descărcările sunt în [Releases](https://github.com/anervalens-netizen/pdf-reader/releases).
+
+În release-ul 1.1.1, folosește `PDF-Reader-1.1.1-release-signed.apk` pentru Android;
+`app-debug.apk` este destinat depanării și folosește altă semnătură. Actualizarea directă
+de la debug la release nu este posibilă fără migrarea datelor aplicației.
 
 ---
 
@@ -61,7 +65,7 @@ Descărcările sunt în [Releases](https://github.com/anervalens-netizen/pdf-rea
 ## Developere
 
 ```bash
-npm install
+npm ci
 npm run dev         # pornește aplicația Electron cu hot reload
 npm run dev:web     # pornește varianta web (PWA)
 npm run typecheck   # verifică tipurile (main + renderer)
@@ -86,7 +90,7 @@ PDF_CAPTURE_DIR=qa PDF_CAPTURE_PDF=samples/pdf-sample.pdf npx electron .
 ### Packaging
 
 ```bash
-npm run dist:win     # instalator NSIS: release/PDF-Setup-1.0.0.exe
+npm run dist:win     # instalator NSIS: release/PDF-Setup-1.1.1.exe
 npm run dist:linux   # AppImage + deb
 ```
 
@@ -102,8 +106,10 @@ npm run android:sync  # build web + copiere în proiectul Capacitor
 npm run android:open  # deschide proiectul în Android Studio
 ```
 
-APK-ul se construiește în CI (JDK 21 + Android SDK 36 + Gradle), fiindcă
-toolchain-ul Android nu e instalat local.
+APK-ul Android poate fi construit local cu JDK 21 și Android SDK 36, sau în CI.
+După `npm ci` și `npm run android:sync`, `cd android && ./gradlew assembleRelease`
+produce un APK nesemnat; CI îl semnează cu cheia dedicată și verifică semnătura.
+Cheia și parola trebuie păstrate în afara repository-ului.
 
 ## Structura proiectului
 
@@ -148,12 +154,12 @@ Au fost citite review-urile automate din PR #1 și PR #2; corecțiile acestei ve
 
 - Desktop: copiile salvate prin dialog sunt autorizate pentru redeschidere din „Recente”.
 - IndexedDB: o listă de adnotări golită intenționat nu este repopulată din metadatele vechi; deschiderea așteaptă scrierile locale încă în curs înainte de citirea adnotărilor.
-- Print: pentru maximum 35 de pagini, sunt montate și randate toate paginile înainte de apelarea dialogului; documentele mai mari cer salvarea unei copii și tipărirea din cititorul sistemului, în loc să printeze pagini goale. Pipeline-ul de tipărire rămâne dependent de zoom și va fi reproiectat în 1.1.0.
+- Print: pentru maximum 35 de pagini, sunt montate și randate toate paginile înainte de apelarea dialogului; documentele mai mari cer salvarea unei copii și tipărirea din cititorul sistemului, în loc să printeze pagini goale. Pipeline-ul de tipărire rămâne dependent de zoom; limita este prezentă și în 1.1.1.
 - Android: salvarea prin Storage Access Framework se execută în fir de fundal pentru a nu bloca interfața la furnizori de fișiere lenți.
 - PWA: navigația cu HTTP 503 folosește interfața offline deja memorată în cache, cu test de regresie.
 - Dependențe: `uuid` transitive actualizat prin override la ramura reparată 11.1.1+, cu audit npm curat.
 
-Review-ul privind aparența vizuală Unicode a formularelor **nu este încă închis complet**. Valoarea este păstrată în PDF și există avertizare, dar pentru afișarea corectă în orice cititor trebuie folosit un font Unicode în aparențele formularului.
+La versiunea 1.0.3, aspectul Unicode al formularelor rămânea o limitare; versiunea 1.1.1 adaugă fontul încorporat și testele descrise mai sus. Caracterele care nu sunt acoperite de font folosesc fallback-ul cu avertizare.
 
 ## Versiunea 1.0.2 — integritatea datelor și stabilitate
 
@@ -162,7 +168,7 @@ Review-ul privind aparența vizuală Unicode a formularelor **nu este încă în
 - **Migrare**: la reimportul unui PDF identic păstrat în v1.0.0 sub cheia `web:<nume>`, sesiunile și adnotările sunt copiate către cheia SHA-256 fără ștergerea originalului. Fișierele diferite cu același nume nu sunt amestecate.
 - **Electron**: accesul la fișiere este permis numai după autorizarea implicită prin dialogul sistemului, deschiderea din sistemul de operare sau drag-and-drop. Permisiunile sunt păstrate într-un fișier local de metadate, fără a trimite documente pe server. Fișierele din „Recente” neautorizate anterior necesită reselectare.
 - **Performanță**: pagina și stratul text sunt demontate când sunt la distanță de viewport, fără a pierde sloturile necesare navigării. Un test de 140 de pagini a păstrat doar 3 canvas-uri active la finalul documentului.
-- **Android**: suport în cod pentru „Deschide cu” prin intentul `ACTION_VIEW` și `ContentResolver`. Importul extern prin bridge este limitat la 32 MB pentru a reduce riscul de epuizare a memoriei; nu înlocuiește testarea pe telefon fizic.
+- **Android**: suport în cod pentru „Deschide cu” prin intentul `ACTION_VIEW` și `ContentResolver`. Importul extern prin bridge este limitat la 32 MB pentru a reduce riscul de epuizare a memoriei; verificarea ulterioară pe telefon este descrisă la limitări.
 - **QA**: teste de migrare a notițelor, două PDF-uri cu același nume, PDF deteriorat, document mare, plus test desktop pentru respingerea unei citiri neautorizate.
 
 ## Versiunea 1.0.1 — corecții și verificări
@@ -179,15 +185,23 @@ Review-ul privind aparența vizuală Unicode a formularelor **nu este încă în
 
 - **Tipărirea** folosește pipeline-ul de print al browserului: foaia de stil de print ascunde
   interfața și pune câte o pagină pe foaie. Rezoluția urmează zoomul curent, nu o rezoluție
-  de tipărire dedicată.
+  de tipărire dedicată. Documentele de peste 35 de pagini trebuie salvate și tipărite dintr-un alt cititor.
 - **Adnotările exportate** sunt desenate ca conținut de pagină (aspect vizual identic), nu ca
   obiecte de adnotare PDF interactive.
 - **Actualizările automate** sunt cablate, dar inactive până când `PDF_UPDATE_FEED` indică un
   furnizor de release-uri. În repo sunt deja configurate release-urile GitHub.
 - **Formularele** se completează interactiv (PDF.js), iar valorile sunt exportate în copia
   rezultată pe câmpurile care pot fi scrise.
-- **Android**: deschiderea din managerul de fișiere prin „Deschide cu” este implementată în 1.0.2, dar trebuie validată pe dispozitiv fizic; pentru fișiere externe peste 32 MB trebuie folosită o cale de import diferită.
+- **Android**: pe OnePlus 6T cu Android 11 au fost verificate instalarea release, deschiderea unui PDF prin `ACTION_VIEW`, documentele recente și salvarea prin SAF. Alegerea din managerul de fișiere nu a fost verificată separat; importul extern este limitat la 32 MB.
 - **Android**: APK-ul release este semnat cu cheia permanentă dedicată; CI verifică semnătura și publică artefactul. APK-ul debug are o semnătură diferită și nu se poate actualiza direct la release; datele trebuie migrate înainte de reinstalare. Secretele necesare sunt `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` și `ANDROID_KEY_ALIAS`.
+
+## Verificări efectuate
+
+La 29 octombrie 2026, pachetul `deb` 1.1.1 a fost instalat pe Dell; într-un afișaj
+X virtual au fost verificate deschiderea, navigarea, căutarea, desenul și salvarea
+unei copii PDF. Pe OnePlus 6T au fost verificate APK-ul release semnat, migrarea
+locală a datelor, deschiderea și salvarea unui PDF. Instalarea nativă Windows și
+workflow-ul complet de publicare pentru o versiune nouă rămân de verificat.
 
 ## Licență
 

@@ -139,7 +139,7 @@ jobs:
           if-no-files-found: error
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      # Varianta semnată se construiește doar dacă există cheia în secrets.
+      # Semnarea este obligatorie; lipsa oricărui secret oprește release-ul.
       - name: Build APK semnat (release)
         working-directory: android
         run: |
