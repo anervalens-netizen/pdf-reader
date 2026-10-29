@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { useApp } from '../state/store'
 import { PageView } from './PageView'
 import { SearchBar } from './SearchBar'
+import { Icon } from './Icon'
 import type { Annotation } from '../lib/annotations'
 
 const PAGE_GAP = 20
@@ -30,7 +31,6 @@ function PageSlot({
   onCreateAnnotation,
   onRequestNote,
   onPlaceSignature,
-  onVisible,
   registerElement
 }: {
   pageNumber: number
@@ -44,7 +44,6 @@ function PageSlot({
   onCreateAnnotation: (annotation: Annotation) => void
   onRequestNote: (page: number, x: number, y: number) => void
   onPlaceSignature: (page: number, x: number, y: number) => void
-  onVisible: (page: number) => void
   registerElement: (page: number, element: HTMLElement | null) => void
 }): JSX.Element {
   const [near, setNear] = useState(false)
@@ -91,7 +90,6 @@ function PageSlot({
           onCreateAnnotation={onCreateAnnotation}
           onRequestNote={onRequestNote}
           onPlaceSignature={onPlaceSignature}
-          onVisible={onVisible}
           registerElement={() => { /* slot owns the stable navigation anchor */ }}
         />
       )}
@@ -108,7 +106,8 @@ export function PageArea({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [sizes, setSizes] = useState<Map<number, PageSize>>(new Map())
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
-  const lastFitRef = useRef<number>(-1)
+  const zoomRef = useRef(state.zoom)
+  zoomRef.current = state.zoom
   const programmaticRef = useRef(false)
   const pagesRef = useRef<Map<number, HTMLElement>>(new Map())
 
@@ -178,10 +177,9 @@ export function PageArea({
     const scale =
       state.zoomMode === 'fit-width' ? scaleWidth : Math.min(scaleWidth, scaleHeight)
     const clamped = Math.min(4, Math.max(0.15, scale))
-    if (Math.abs(clamped - lastFitRef.current) < 0.004) return
-    lastFitRef.current = clamped
+    if (Math.abs(clamped - state.zoom) < 0.004) return
     setZoom(clamped, state.zoomMode)
-  }, [state.file, state.zoomMode, containerSize, sizes, setZoom])
+  }, [state.file, state.zoomMode, state.zoom, containerSize, sizes, setZoom])
 
   // --- Ctrl + wheel zoom ----------------------------------------------------
   useEffect(() => {
@@ -190,12 +188,41 @@ export function PageArea({
     const onWheel = (event: WheelEvent): void => {
       if (!event.ctrlKey && !event.metaKey) return
       event.preventDefault()
-      lastFitRef.current = -1
       zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12)
     }
     element.addEventListener('wheel', onWheel, { passive: false })
     return () => element.removeEventListener('wheel', onWheel)
   }, [zoomBy])
+
+  // Two-finger zoom is limited to the document, leaving the app shell fixed.
+  useEffect(() => {
+    const element = scrollRef.current
+    if (!element) return
+    let pinch: { distance: number; zoom: number } | null = null
+    const distance = (touches: TouchList): number => Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    )
+    const start = (event: TouchEvent): void => {
+      if (event.touches.length === 2) pinch = { distance: distance(event.touches), zoom: zoomRef.current }
+    }
+    const move = (event: TouchEvent): void => {
+      if (!pinch || event.touches.length !== 2 || pinch.distance === 0) return
+      event.preventDefault()
+      setZoom(pinch.zoom * distance(event.touches) / pinch.distance)
+    }
+    const end = (event: TouchEvent): void => { if (event.touches.length < 2) pinch = null }
+    element.addEventListener('touchstart', start, { passive: true })
+    element.addEventListener('touchmove', move, { passive: false })
+    element.addEventListener('touchend', end)
+    element.addEventListener('touchcancel', end)
+    return () => {
+      element.removeEventListener('touchstart', start)
+      element.removeEventListener('touchmove', move)
+      element.removeEventListener('touchend', end)
+      element.removeEventListener('touchcancel', end)
+    }
+  }, [setZoom])
 
   // --- Scroll handling ------------------------------------------------------
   const handleScroll = (): void => {
@@ -204,7 +231,7 @@ export function PageArea({
     const probe = container.scrollTop + 80
     let current = 1
     for (const [pageNumber, element] of pagesRef.current) {
-      if (element.offsetTop - container.offsetTop <= probe) current = pageNumber
+      if (element.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop <= probe) current = pageNumber
       else break
     }
     if (current !== state.page) {
@@ -222,9 +249,9 @@ export function PageArea({
     const container = scrollRef.current
     const element = pagesRef.current.get(state.page)
     if (!container || !element) return
-    const target = element.offsetTop - container.offsetTop - 12
+    const target = element.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 12
     if (Math.abs(container.scrollTop - target) < 8) return
-    container.scrollTo({ top: target, behavior: 'smooth' })
+    container.scrollTo({ top: target, behavior: 'instant' })
   }, [state.page])
 
   const activeHit =
@@ -244,6 +271,11 @@ export function PageArea({
   return (
     <div className="pagearea">
       <SearchBar />
+      <div className="mobile-zoom" role="group" aria-label="Zoom document">
+        <button type="button" aria-label="Micșorează" onClick={() => zoomBy(1 / 1.2)}><Icon name="zoomOut" /></button>
+        <button type="button" aria-label="Potrivește lățimea" onClick={() => setZoom(state.zoom, 'fit-width')}>{Math.round(state.zoom * 100)}%</button>
+        <button type="button" aria-label="Mărește" onClick={() => zoomBy(1.2)}><Icon name="zoomIn" /></button>
+      </div>
       <div className="pagearea__scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="pagearea__pages">
           {pages.map((pageNumber) => {
@@ -262,12 +294,6 @@ export function PageArea({
                 onCreateAnnotation={addAnnotation}
                 onRequestNote={onRequestNote}
                 onPlaceSignature={onPlaceSignature}
-                onVisible={(page) => {
-                  if (page !== state.page) {
-                    programmaticRef.current = true
-                    setPage(page)
-                  }
-                }}
                 registerElement={(page, element) => {
                   if (element) pagesRef.current.set(page, element)
                   else pagesRef.current.delete(page)

@@ -330,6 +330,10 @@ export default function App(): JSX.Element {
       setSignatureOpen(false)
       return true
     }
+    if (state.sidebarOpen && window.matchMedia('(max-width: 900px)').matches) {
+      dispatch({ type: 'sidebar/set', open: false })
+      return true
+    }
     if (state.file) {
       closeDocument()
       return true
@@ -396,7 +400,12 @@ export default function App(): JSX.Element {
       <Toolbar onSignatureRequest={() => setSignatureOpen(true)} onPagesRequest={() => setPagesOpen(true)} />
 
       <div className="app__body">
-        {state.sidebarOpen && state.file && <Sidebar />}
+        {state.sidebarOpen && state.file && (
+          <>
+            <button type="button" className="sidebar-backdrop" aria-label="Închide panoul" onClick={() => dispatch({ type: 'sidebar/set', open: false })} />
+            <Sidebar />
+          </>
+        )}
 
         <main className="app__main">
           {state.status === 'loading' && (

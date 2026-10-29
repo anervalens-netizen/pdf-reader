@@ -1,6 +1,6 @@
 {
   "name": "pdf-reader",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "PDF — a calm, fast PDF reader for desktop",
   "main": "./out/main/index.js",
   "author": {
@@ -27,6 +27,7 @@
     "test:export": "node scripts/make-sample-pdf.mjs && node scripts/test-export.mjs",
     "test:sw": "node scripts/test-sw.cjs",
     "test:pages": "node scripts/test-page-tools.mjs",
+    "test:mobile": "electron scripts/qa-mobile.cjs",
     "test:web": "node scripts/make-sample-pdf.mjs && npm run build:web && electron scripts/qa-web.cjs"
   },
   "dependencies": {

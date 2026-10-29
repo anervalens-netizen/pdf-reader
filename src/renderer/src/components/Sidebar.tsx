@@ -100,6 +100,10 @@ function Thumbnail({
 export function Sidebar(): JSX.Element {
   const { state, dispatch, setPage, removeAnnotation, clearAnnotations } = useApp()
   const [tab, setTab] = useState<SidebarTab>(state.sidebarTab)
+  const selectPage = (page: number): void => {
+    setPage(page)
+    if (window.matchMedia('(max-width: 900px)').matches) dispatch({ type: 'sidebar/set', open: false })
+  }
 
   return (
     <aside className="sidebar" aria-label="Panou lateral">
@@ -118,6 +122,7 @@ export function Sidebar(): JSX.Element {
             <span>{item.label}</span>
           </button>
         ))}
+        <button type="button" className="sidebar__close" aria-label="Închide panoul" onClick={() => dispatch({ type: 'sidebar/set', open: false })}>×</button>
       </div>
 
       {tab === 'thumbnails' && (
@@ -128,7 +133,7 @@ export function Sidebar(): JSX.Element {
               pageNumber={pageNumber}
               width={148}
               active={pageNumber === state.page}
-              onSelect={() => setPage(pageNumber)}
+              onSelect={() => selectPage(pageNumber)}
             />
           ))}
         </div>
@@ -145,7 +150,7 @@ export function Sidebar(): JSX.Element {
                   <button
                     type="button"
                     className="outline__item"
-                    onClick={() => setPage(item.page)}
+                    onClick={() => selectPage(item.page)}
                     title={item.title}
                   >
                     <Icon name="chevronRight" size={13} />

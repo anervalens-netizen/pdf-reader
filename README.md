@@ -9,14 +9,14 @@ Un singur renderer (React + PDF.js) este folosit pe următoarele ținte:
 
 | Țintă | Formă | Status |
 | --- | --- | --- |
-| **Windows** | instalator NSIS (`PDF-Setup-1.1.1.exe`) | distribuit; testarea instalării native este în curs |
+| **Windows** | instalator NSIS (`PDF-Setup-1.1.2.exe`) | distribuit; testarea instalării native este în curs |
 | **Linux** | AppImage + `deb` | pachetul `deb` 1.1.1 instalat și testat pe Dell |
 | **Android** | APK semnat (Capacitor) + PWA instalabilă | APK 1.1.1 instalat și testat pe OnePlus 6T |
 | **Web** | PWA instalabilă, funcționează offline | gata |
 
 Descărcările sunt în [Releases](https://github.com/anervalens-netizen/pdf-reader/releases).
 
-În release-ul 1.1.1, folosește `PDF-Reader-1.1.1-release-signed.apk` pentru Android;
+În release-ul 1.1.2, folosește `app-release.apk` pentru Android;
 `app-debug.apk` este destinat depanării și folosește altă semnătură. Actualizarea directă
 de la debug la release nu este posibilă fără migrarea datelor aplicației.
 
@@ -77,6 +77,7 @@ npm run build       # build de producție Electron în out/
 ```bash
 npm run icons          # regenerează logo-ul și toate icoanele (desktop, PWA, Android)
 npm run test:export    # test end-to-end pentru exportul de adnotări
+xvfb-run -a npm run test:mobile # panou, navigare și zoom la dimensiune de telefon
 npm run test:web       # QA end-to-end pentru build-ul web (randare + recente)
 node scripts/make-sample-pdf.mjs   # creează samples/pdf-sample.pdf (12 pagini)
 ```
@@ -90,7 +91,7 @@ PDF_CAPTURE_DIR=qa PDF_CAPTURE_PDF=samples/pdf-sample.pdf npx electron .
 ### Packaging
 
 ```bash
-npm run dist:win     # instalator NSIS: release/PDF-Setup-1.1.1.exe
+npm run dist:win     # instalator NSIS: release/PDF-Setup-1.1.2.exe
 npm run dist:linux   # AppImage + deb
 ```
 
@@ -129,6 +130,13 @@ build/        logo-ul vectorial și icoanele rasterizate
 
 Electron 45 · React 19 · TypeScript 7 · Vite 8 · PDF.js 6.4 · pdf-lib 1.17 ·
 Capacitor 8 · IndexedDB
+
+## Versiunea 1.1.2 — utilizare pe telefon
+
+- Panoul pornește închis pe ecrane înguste, are închidere vizibilă, se închide la atingerea fundalului sau selectarea paginii și respectă zona barelor sistemului.
+- Zoomul este accesibil direct peste document prin butoane și prin gest cu două degete. Revenirea la potrivirea lățimii este disponibilă prin apăsarea procentului.
+- O singură logică urmărește pagina vizibilă, pentru a evita schimbările repetate și salturile între pagini.
+- Testele includ verificări automate ale panoului și zoomului și verificări pe OnePlus 6T cu Android 11. Funcționarea pe alte dispozitive și versiuni Android necesită confirmare.
 
 ## Versiunea 1.1.1 — formular PDF Unicode (remediere Codex)
 

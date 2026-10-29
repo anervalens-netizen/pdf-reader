@@ -129,6 +129,9 @@ jobs:
           npm run build:web
           npx cap sync android
 
+      - name: Verifică interfața mobilă
+        run: xvfb-run -a npm run test:mobile
+
       - name: Build APK (debug)
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon

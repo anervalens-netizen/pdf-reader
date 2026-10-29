@@ -89,7 +89,7 @@ const initialState: AppState = {
   page: 1,
   zoom: 1,
   zoomMode: 'fit-width',
-  sidebarOpen: localStorage.getItem('pdf.sidebar') !== 'hidden',
+  sidebarOpen: !window.matchMedia('(max-width: 900px)').matches && localStorage.getItem('pdf.sidebar') !== 'hidden',
   sidebarTab: 'thumbnails',
   tool: 'select',
   color: '#ffd94a',

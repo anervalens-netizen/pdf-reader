@@ -23,7 +23,6 @@ export interface PageViewProps {
   onCreateAnnotation: (annotation: Annotation) => void
   onRequestNote: (page: number, x: number, y: number) => void
   onPlaceSignature: (page: number, x: number, y: number) => void
-  onVisible: (pageNumber: number) => void
   registerElement: (pageNumber: number, element: HTMLElement | null) => void
 }
 
@@ -45,7 +44,6 @@ export function PageView({
   onCreateAnnotation,
   onRequestNote,
   onPlaceSignature,
-  onVisible,
   registerElement
 }: PageViewProps): JSX.Element {
   const { state, docRef } = useApp()
@@ -162,24 +160,6 @@ export function PageView({
       renderTaskRef.current = null
     }
   }, [docRef, pageNumber, zoom])
-
-  // --- Report the most visible page ---------------------------------------
-  useEffect(() => {
-    const element = pageRef.current
-    if (!element) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio > 0.35) {
-            onVisible(pageNumber)
-          }
-        }
-      },
-      { threshold: [0.35, 0.75] }
-    )
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [onVisible, pageNumber])
 
   // --- Helpers -------------------------------------------------------------
   const toPdfPoint = useCallback(
