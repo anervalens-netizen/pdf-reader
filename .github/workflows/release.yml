@@ -150,13 +150,16 @@ jobs:
           fi
           umask 077
           keystore="$RUNNER_TEMP/pdf-reader-signing.p12"
-          trap 'rm -f "$keystore"' EXIT
+          password_file="$RUNNER_TEMP/pdf-reader-signing.password"
+          trap 'rm -f "$keystore" "$password_file"' EXIT
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$keystore"
-          ./gradlew assembleRelease --no-daemon \
-            -Pandroid.injected.signing.storeFile="$keystore" \
-            -Pandroid.injected.signing.storePassword="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.keyAlias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.keyPassword="$KEYSTORE_PASSWORD"
+          printf '%s\n' "$KEYSTORE_PASSWORD" > "$password_file"
+          ./gradlew assembleRelease --no-daemon
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign \
+            --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "file:$password_file" \
+            --out app/build/outputs/apk/release/app-release.apk \
+            app/build/outputs/apk/release/app-release-unsigned.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
       - uses: actions/upload-artifact@v4
