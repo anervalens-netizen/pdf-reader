@@ -49,7 +49,11 @@ jobs:
           npx cap sync android
 
       - name: Verifică interfața mobilă
-        run: xvfb-run -a npm run test:mobile
+        run: |
+          node node_modules/electron/install.js
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+          xvfb-run -a npm run test:mobile
 
       - name: Build APK (debug)
         working-directory: android
