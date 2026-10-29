@@ -143,22 +143,27 @@ jobs:
       - name: Build APK semnat (release)
         working-directory: android
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "Fără cheie de semnare (ANDROID_KEYSTORE_BASE64) - se sare varianta de release."
-            exit 0
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "Secretele de semnare Android lipsesc." >&2
+            exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          umask 077
+          keystore="$RUNNER_TEMP/pdf-reader-signing.p12"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$keystore"
           ./gradlew assembleRelease --no-daemon \
-            -Pandroid.injected.signing.storeFile=keystore.jks \
+            -Pandroid.injected.signing.storeFile="$keystore" \
             -Pandroid.injected.signing.storePassword="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.keyAlias="$KEY_ALIAS" \
             -Pandroid.injected.signing.keyPassword="$KEYSTORE_PASSWORD"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pdf-android-release
-          if-no-files-found: ignore
+          if-no-files-found: error
           path: android/app/build/outputs/apk/release/app-release.apk
 
   release:
@@ -182,7 +187,6 @@ jobs:
           path: artifacts
 
       - uses: actions/download-artifact@v4
-        continue-on-error: true
         with:
           name: pdf-android-release
           path: artifacts-release

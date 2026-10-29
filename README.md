@@ -187,9 +187,7 @@ Review-ul privind aparența vizuală Unicode a formularelor **nu este încă în
 - **Formularele** se completează interactiv (PDF.js), iar valorile sunt exportate în copia
   rezultată pe câmpurile care pot fi scrise.
 - **Android**: deschiderea din managerul de fișiere prin „Deschide cu” este implementată în 1.0.2, dar trebuie validată pe dispozitiv fizic; pentru fișiere externe peste 32 MB trebuie folosită o cale de import diferită.
-- **Android**: APK-ul din CI este semnat cu cheia de debug. Pentru un APK semnat cu o cheie
-  personală, adaugă secretele `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` și
-  `ANDROID_KEY_ALIAS` în repo — workflow-ul construiește automat și varianta de release.
+- **Android**: APK-ul release este semnat cu cheia permanentă dedicată; CI verifică semnătura și publică artefactul. APK-ul debug are o semnătură diferită și nu se poate actualiza direct la release; datele trebuie migrate înainte de reinstalare. Secretele necesare sunt `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` și `ANDROID_KEY_ALIAS`.
 
 ## Licență
 
