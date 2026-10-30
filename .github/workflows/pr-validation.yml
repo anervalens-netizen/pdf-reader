@@ -1,0 +1,55 @@
+name: Pull request quality gate
+
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'package*.json'
+      - '.github/workflows/**'
+      - 'vite*.ts'
+      - 'capacitor.config.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  android-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Android SDK platform 36
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" > /dev/null || true
+      - run: npm run typecheck
+      - run: npm run test:export
+      - run: npm run test:edit
+      - run: npm run test:text
+      - run: npm run android:sync
+      - name: Mobile UI smoke
+        run: |
+          node node_modules/electron/install.js
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+          xvfb-run -a npm run test:mobile
+      - name: Build unsigned test APK (never use signing credentials in PR)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdf-android-pr-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

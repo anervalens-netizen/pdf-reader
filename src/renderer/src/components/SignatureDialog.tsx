@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
+import { cleanSignaturePhoto } from '../lib/photoSignature'
 
 interface SignatureDialogProps {
   open: boolean
@@ -13,6 +14,13 @@ export function SignatureDialog({ open, onCancel, onConfirm }: SignatureDialogPr
   const drawingRef = useRef(false)
   const lastRef = useRef<{ x: number; y: number } | null>(null)
   const [hasInk, setHasInk] = useState(false)
+  const [mode, setMode] = useState<'draw' | 'photo'>('draw')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoError, setPhotoError] = useState('')
+  const [sensitivity, setSensitivity] = useState(170)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const cameraRef = useRef<HTMLInputElement | null>(null)
 
   const clear = useCallback(() => {
     const canvas = canvasRef.current
@@ -25,9 +33,27 @@ export function SignatureDialog({ open, onCancel, onConfirm }: SignatureDialogPr
   useEffect(() => {
     if (open) {
       setHasInk(false)
+      setMode('draw')
+      setPhotoFile(null)
+      setPhotoPreview(null)
+      setPhotoError('')
+      setSensitivity(170)
       window.setTimeout(clear, 0)
     }
   }, [open, clear])
+
+  useEffect(() => {
+    if (!open || !photoFile) return
+    let cancelled = false
+    setPhotoPreview(null)
+    setPhotoError('')
+    void cleanSignaturePhoto(photoFile, sensitivity).then((url) => {
+      if (!cancelled) setPhotoPreview(url)
+    }).catch((error) => {
+      if (!cancelled) setPhotoError(String(error))
+    })
+    return () => { cancelled = true }
+  }, [open, photoFile, sensitivity])
 
   const pointerPosition = (event: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const canvas = canvasRef.current!
@@ -72,6 +98,10 @@ export function SignatureDialog({ open, onCancel, onConfirm }: SignatureDialogPr
   }
 
   const confirm = (): void => {
+    if (mode === 'photo') {
+      if (photoPreview) onConfirm(photoPreview)
+      return
+    }
     const canvas = canvasRef.current
     if (!canvas) return
     const context = canvas.getContext('2d')
@@ -129,33 +159,50 @@ export function SignatureDialog({ open, onCancel, onConfirm }: SignatureDialogPr
         </header>
 
         <div className="modal__body">
-          <p className="modal__hint">
-            Semnează cu mouse-ul, stylus-ul sau degetul. Poți șterge și redesena.
-          </p>
-          <canvas
-            ref={canvasRef}
-            className="signature-canvas"
-            width={640}
-            height={220}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-          />
-          {!hasInk && <span className="signature-canvas__hint">Semnează aici…</span>}
+          <div className="signature-choices" role="group" aria-label="Sursa semnăturii">
+            <button type="button" className={"btn" + (mode === 'draw' ? ' btn--primary' : '')}
+              onClick={() => setMode('draw')}>Desenează</button>
+            <button type="button" className={"btn" + (mode === 'photo' ? ' btn--primary' : '')}
+              onClick={() => { setMode('photo'); fileRef.current?.click() }}>Din fotografie</button>
+          </div>
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden
+            aria-label="Importă fotografie semnătură"
+            onChange={(event) => { setPhotoFile(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden
+            aria-label="Fotografiază semnătura"
+            onChange={(event) => { setPhotoFile(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} />
+          {mode === 'draw' ? (
+            <>
+              <p className="modal__hint">Semnează cu mouse-ul, stylus-ul sau degetul.</p>
+              <canvas ref={canvasRef} className="signature-canvas" width={640} height={220}
+                onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} />
+            </>
+          ) : (
+            <div className="signature-photo">
+              <p className="modal__hint">Semnează pe hârtie albă și fotografiază sau importă imaginea. Fundalul se elimină local.</p>
+              <div className="signature-choices">
+                <button type="button" className="btn" onClick={() => fileRef.current?.click()}>Alege fotografia</button>
+                <button type="button" className="btn" onClick={() => cameraRef.current?.click()}>Camera telefonului</button>
+              </div>
+              {photoPreview && <img src={photoPreview} className="signature-photo__preview" alt="Previzualizare semnătură fără fundal" />}
+              {photoError && <p role="alert" className="signature-photo__error">{photoError}</p>}
+              {photoFile && (
+                <label className="signature-sensitivity">
+                  Sensibilitate: {sensitivity}
+                  <input type="range" min={85} max={220} value={sensitivity}
+                    onChange={(event) => setSensitivity(Number(event.target.value))} />
+                </label>
+              )}
+            </div>
+          )}
         </div>
-
         <footer className="modal__footer">
-          <button type="button" className="btn" onClick={clear} disabled={!hasInk}>
-            Șterge
-          </button>
+          {mode === 'draw' && <button type="button" className="btn" onClick={clear} disabled={!hasInk}>Șterge</button>}
           <div className="modal__footer-spacer" />
-          <button type="button" className="btn" onClick={onCancel}>
-            Renunță
-          </button>
-          <button type="button" className="btn btn--primary" onClick={confirm} disabled={!hasInk}>
-            Folosește semnătura
-          </button>
+          <button type="button" className="btn" onClick={onCancel}>Renunță</button>
+          <button type="button" className="btn btn--primary" onClick={confirm}
+            disabled={mode === 'draw' ? !hasInk : !photoPreview}>Folosește semnătura</button>
         </footer>
       </div>
     </div>

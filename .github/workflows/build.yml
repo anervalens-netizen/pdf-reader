@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -34,6 +35,8 @@ jobs:
           npm run test:export
           npm run test:sw
           npm run test:pages
+          npm run test:edit
+          npm run test:text
 
       - name: Build instalator
         run: npm run dist:win
@@ -77,6 +80,8 @@ jobs:
           npm run test:export
           npm run test:sw
           npm run test:pages
+          npm run test:edit
+          npm run test:text
 
       - name: Test UI Web / documente corupte / nume duplicate
         run: |

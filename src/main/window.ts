@@ -40,6 +40,7 @@ export function createWindow(state: WindowState): BrowserWindow {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
+      plugins: true, // Chromium PDF plugin handles vector printing from a blob iframe
       spellcheck: false,
       webviewTag: false
     }

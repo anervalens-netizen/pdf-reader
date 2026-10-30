@@ -12,6 +12,8 @@ interface PageAreaProps {
   signatureImage: string | null
   onPlaceSignature: (page: number, x: number, y: number) => void
   onRequestNote: (page: number, x: number, y: number) => void
+  onRequestText: (page: number, x: number, y: number) => void
+  onEditText: (annotation: Extract<Annotation, { type: 'text' }>) => void
 }
 
 interface PageSize {
@@ -24,12 +26,13 @@ function PageSlot({
   size,
   zoom,
   root,
-  forcePrint,
   hits,
   activeHitKey,
   signatureImage,
   onCreateAnnotation,
   onRequestNote,
+  onRequestText,
+  onEditText,
   onPlaceSignature,
   registerElement
 }: {
@@ -37,12 +40,13 @@ function PageSlot({
   size: PageSize
   zoom: number
   root: HTMLElement | null
-  forcePrint: boolean
   hits: ReturnType<typeof useApp>['state']['hits']
   activeHitKey: string | null
   signatureImage: string | null
   onCreateAnnotation: (annotation: Annotation) => void
   onRequestNote: (page: number, x: number, y: number) => void
+  onRequestText: (page: number, x: number, y: number) => void
+  onEditText: (annotation: Extract<Annotation, { type: 'text' }>) => void
   onPlaceSignature: (page: number, x: number, y: number) => void
   registerElement: (page: number, element: HTMLElement | null) => void
 }): JSX.Element {
@@ -80,7 +84,7 @@ function PageSlot({
       }}
       data-slot={pageNumber}
     >
-      {(near || forcePrint) && (
+      {near && (
         <PageView
           pageNumber={pageNumber}
           zoom={zoom}
@@ -89,6 +93,8 @@ function PageSlot({
           signatureImage={signatureImage}
           onCreateAnnotation={onCreateAnnotation}
           onRequestNote={onRequestNote}
+          onRequestText={onRequestText}
+          onEditText={onEditText}
           onPlaceSignature={onPlaceSignature}
           registerElement={() => { /* slot owns the stable navigation anchor */ }}
         />
@@ -100,7 +106,9 @@ function PageSlot({
 export function PageArea({
   signatureImage,
   onPlaceSignature,
-  onRequestNote
+  onRequestNote,
+  onRequestText,
+  onEditText
 }: PageAreaProps): JSX.Element {
   const { state, docRef, setZoom, zoomBy, setPage, addAnnotation } = useApp()
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -287,12 +295,13 @@ export function PageArea({
                 size={size}
                 zoom={state.zoom}
                 root={scrollRef.current}
-                forcePrint={state.printing}
                 hits={hitsByPage.get(pageNumber) ?? []}
                 activeHitKey={activeHitKey}
                 signatureImage={signatureImage}
                 onCreateAnnotation={addAnnotation}
                 onRequestNote={onRequestNote}
+                onRequestText={onRequestText}
+                onEditText={onEditText}
                 onPlaceSignature={onPlaceSignature}
                 registerElement={(page, element) => {
                   if (element) pagesRef.current.set(page, element)

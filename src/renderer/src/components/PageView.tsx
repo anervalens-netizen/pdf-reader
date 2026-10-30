@@ -12,7 +12,7 @@ import {
   type TextStyleLike
 } from '../lib/geometry'
 import { buildPageIndex, itemsInRange } from '../lib/textIndex'
-import { createId, type Annotation, type SignatureAnnotation } from '../lib/annotations'
+import { createId, type Annotation, type SignatureAnnotation, type TextAnnotation } from '../lib/annotations'
 
 export interface PageViewProps {
   pageNumber: number
@@ -22,6 +22,8 @@ export interface PageViewProps {
   signatureImage: string | null
   onCreateAnnotation: (annotation: Annotation) => void
   onRequestNote: (page: number, x: number, y: number) => void
+  onRequestText: (page: number, x: number, y: number) => void
+  onEditText: (annotation: TextAnnotation) => void
   onPlaceSignature: (page: number, x: number, y: number) => void
   registerElement: (pageNumber: number, element: HTMLElement | null) => void
 }
@@ -43,6 +45,8 @@ export function PageView({
   signatureImage,
   onCreateAnnotation,
   onRequestNote,
+  onRequestText,
+  onEditText,
   onPlaceSignature,
   registerElement
 }: PageViewProps): JSX.Element {
@@ -230,10 +234,12 @@ export function PageView({
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (tool === 'note' || tool === 'signature') {
+      if (event.target instanceof HTMLElement && event.target.closest('.page__text')) return
+      if (tool === 'note' || tool === 'signature' || tool === 'text') {
         const point = toPdfPoint(event)
         if (!point) return
         if (tool === 'note') onRequestNote(pageNumber, point.x, point.y)
+        else if (tool === 'text') onRequestText(pageNumber, point.x, point.y)
         else if (signatureImage) onPlaceSignature(pageNumber, point.x, point.y)
         return
       }
@@ -243,7 +249,7 @@ export function PageView({
       event.currentTarget.setPointerCapture(event.pointerId)
       inkPathRef.current = [point.x, point.y]
     },
-    [tool, toPdfPoint, onRequestNote, onPlaceSignature, pageNumber, signatureImage]
+    [tool, toPdfPoint, onRequestNote, onRequestText, onPlaceSignature, pageNumber, signatureImage]
   )
 
   const handlePointerMove = useCallback(
@@ -284,6 +290,7 @@ export function PageView({
   const noteRects: { rect: Rect; annotation: Annotation }[] = []
   const inkPaths: { points: string; annotation: Annotation }[] = []
   const signatureRects: { rect: Rect; annotation: SignatureAnnotation }[] = []
+  const textRects: { rect: Rect; annotation: TextAnnotation }[] = []
 
   if (viewport) {
     for (const annotation of pageAnnotations) {
@@ -306,6 +313,8 @@ export function PageView({
           }
           inkPaths.push({ points: points.join(' '), annotation })
         }
+      } else if (annotation.type === 'text') {
+        textRects.push({ rect: pdfQuadToViewport(viewport, annotation.rect), annotation })
       } else if (annotation.type === 'signature') {
         signatureRects.push({ rect: pdfQuadToViewport(viewport, annotation.rect), annotation })
       }
@@ -431,6 +440,22 @@ export function PageView({
           </g>
         ))}
       </svg>
+
+      {textRects.map(({ rect, annotation }) => (
+        <button type="button" key={annotation.id} className="page__text"
+          title="Editează caseta de text"
+          aria-label="Editează caseta de text"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => { event.stopPropagation(); onEditText(annotation) }}
+          style={{
+            left: rect.x, top: rect.y, width: Math.max(45, rect.width),
+            minHeight: Math.max(25, rect.height),
+            fontSize: Math.max(8, annotation.fontSize * zoom),
+            color: annotation.color
+          }}>
+          {annotation.text}
+        </button>
+      ))}
 
       {signatureRects.map(({ rect, annotation }) => (
         <img

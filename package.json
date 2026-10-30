@@ -1,6 +1,6 @@
 {
   "name": "pdf-reader",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "PDF — a calm, fast PDF reader for desktop",
   "main": "./out/main/index.js",
   "author": {
@@ -24,6 +24,8 @@
     "pack:win": "npm run build && electron-builder --win --dir --config electron-builder.yml",
     "dist:win": "npm run build && electron-builder --win nsis --publish never --config electron-builder.yml",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never --config electron-builder.yml",
+    "test:edit": "node scripts/test-edit-history.mjs",
+    "test:text": "node scripts/test-text-export.mjs",
     "test:export": "node scripts/make-sample-pdf.mjs && node scripts/test-export.mjs",
     "test:sw": "node scripts/test-sw.cjs",
     "test:pages": "node scripts/test-page-tools.mjs",

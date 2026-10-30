@@ -9,16 +9,30 @@ Un singur renderer (React + PDF.js) este folosit pe următoarele ținte:
 
 | Țintă | Formă | Status |
 | --- | --- | --- |
-| **Windows** | instalator NSIS (`PDF-Setup-1.1.2.exe`) | distribuit; testarea instalării native este în curs |
+| **Windows** | instalator NSIS (`PDF-Setup-1.2.0.exe`) | distribuit; testarea instalării native este în curs |
 | **Linux** | AppImage + `deb` | pachetul `deb` 1.1.1 instalat și testat pe Dell |
 | **Android** | APK semnat (Capacitor) + PWA instalabilă | APK 1.1.1 instalat și testat pe OnePlus 6T |
 | **Web** | PWA instalabilă, funcționează offline | gata |
 
 Descărcările sunt în [Releases](https://github.com/anervalens-netizen/pdf-reader/releases).
 
-În release-ul 1.1.2, folosește `app-release.apk` pentru Android;
+În release-urile 1.1.2 și 1.2.0, folosește `app-release.apk` pentru Android;
 `app-debug.apk` este destinat depanării și folosește altă semnătură. Actualizarea directă
 de la debug la release nu este posibilă fără migrarea datelor aplicației.
+
+---
+
+## Versiunea 1.2.0 — editor extins
+
+- Imprimare vectorială a copiei PDF, independentă de zoom și fără limita de 35 de pagini; verificată automat cu documente de 12 și 140 de pagini. Pe Android, salvează o copie și imprimă din aplicația de sistem.
+- Undo/Redo pentru adnotări (60 de operații, doar sesiunea documentului).
+- Casete de text editabile și export în PDF, inclusiv diacritice românești.
+- Semnătură din fotografie sau cameră; fundal eliminat local. Nu este semnătură digitală certificată.
+- ChatGPT opțional pe desktop: autentificare OAuth, model disponibil în cont, întrebări despre text cu referințe la pagini. Textul este transmis către OpenAI numai la întrebarea utilizatorului, maximum 140.000 de caractere. Conversațiile sunt păstrate numai în memoria aplicației. Nu există OCR pentru scanări.
+- Electron IPC cu autorizare verificată, restricții asupra fișierelor locale și tokenuri ChatGPT criptate de sistemul de operare, dacă este disponibil un seif de credențiale.
+- Actualizări: verificare la pornire numai cu acord, descărcare explicită pentru Windows instalat și Linux AppImage. Android și Linux deb: instalare manuală.
+
+Limitări de verificare: autentificarea reală ChatGPT, imprimanta fizică, instalatorul Windows și actualizarea unui release real necesită validare suplimentară.
 
 ---
 
@@ -91,7 +105,7 @@ PDF_CAPTURE_DIR=qa PDF_CAPTURE_PDF=samples/pdf-sample.pdf npx electron .
 ### Packaging
 
 ```bash
-npm run dist:win     # instalator NSIS: release/PDF-Setup-1.1.2.exe
+npm run dist:win     # instalator NSIS: release/PDF-Setup-1.2.0.exe
 npm run dist:linux   # AppImage + deb
 ```
 
@@ -193,10 +207,10 @@ La versiunea 1.0.3, aspectul Unicode al formularelor rămânea o limitare; versi
 
 - **Tipărirea** folosește pipeline-ul de print al browserului: foaia de stil de print ascunde
   interfața și pune câte o pagină pe foaie. Rezoluția urmează zoomul curent, nu o rezoluție
-  de tipărire dedicată. Documentele de peste 35 de pagini trebuie salvate și tipărite dintr-un alt cititor.
+  de tipărire dedicată. Imprimarea folosește PDF-ul vectorial și nu are limita de 35 de pagini.
 - **Adnotările exportate** sunt desenate ca conținut de pagină (aspect vizual identic), nu ca
   obiecte de adnotare PDF interactive.
-- **Actualizările automate** sunt cablate, dar inactive până când `PDF_UPDATE_FEED` indică un
+- **Actualizările** sunt cablate, dar inactive până când `PDF_UPDATE_FEED` indică un
   furnizor de release-uri. În repo sunt deja configurate release-urile GitHub.
 - **Formularele** se completează interactiv (PDF.js), iar valorile sunt exportate în copia
   rezultată pe câmpurile care pot fi scrise.

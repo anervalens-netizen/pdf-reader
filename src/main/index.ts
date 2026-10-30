@@ -6,7 +6,9 @@ import { createWindow, getMainWindow } from './window'
 import { buildApplicationMenu } from './menu'
 import { loadWindowState, saveWindowState } from './store'
 import { registerIpcHandlers } from './ipc'
+import { registerChatGPT } from './chatgpt'
 import { authorizePdfPath } from './pdfAccess'
+import { trustedSender } from './ipcSecurity'
 
 /** Files requested by the OS (double-click on a .pdf, "Open with", launch args). */
 const pendingOpens = new Set<string>()
@@ -96,15 +98,16 @@ if (!app.requestSingleInstanceLock()) {
 
 app.whenReady().then(async () => {
   registerIpcHandlers()
+  registerChatGPT()
 
   ipcMain.on('pdf:renderer-ready', (event) => {
-    if (event.sender !== getMainWindow()?.webContents) return
+    if (!trustedSender(event, getMainWindow())) return
     rendererReady = true
     flushPendingOpens()
   })
 
   ipcMain.on('pdf:file-dropped', (event, path: string) => {
-    if (event.sender !== getMainWindow()?.webContents) return
+    if (!trustedSender(event, getMainWindow())) return
     if (typeof path === 'string' && path) void openPathInApp(path)
   })
 

@@ -66,6 +66,10 @@ const paths: Record<string, JSX.Element> = {
       <path d="M14 6l4 4" />
     </>
   ),
+  sparkles: <><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z" /></>,
+  undo: <path d="M9 14 4 9l5-5M4 9h10a6 6 0 010 12h-3" />,
+  redo: <path d="m15 14 5-5-5-5m5 5H10a6 6 0 000 12h3" />,
+  text: <><path d="M4 6V4h16v2M12 4v16M8 20h8" /></>,
   signature: (
     <>
       <path d="M3 17c2.5 0 3-9 5.5-9S10 17 12.5 17s2-4 3.5-4S18 16 21 15" />
