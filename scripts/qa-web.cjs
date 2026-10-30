@@ -185,27 +185,33 @@ async function main() {
   })()`, true)
   console.log('[qa-web] migrare fără pierderi:', legacyMigration)
 
-  // Codex P2: print preparation must populate every page, not only
-  // the near-viewport canvases used for interactive reading.
+  // Vector print: generated PDF must contain all pages without mounting
+  // every distant canvas. Read the blob before the browser print viewer uses it.
   await win.webContents.executeJavaScript(`(() => {
-    window.__pdfPrintCapture = null
-    window.print = () => {
-      window.__pdfPrintCapture = {
-        pages: document.querySelectorAll('.page-slot').length,
-        ready: document.querySelectorAll('.page-slot .page[data-print-ready="true"]').length,
-        canvases: document.querySelectorAll('.page-slot canvas').length
-      }
-    }
+    window.__printBefore = document.querySelectorAll('iframe[aria-hidden=true][src^="blob:"]').length
     document.querySelector('button[aria-label="Tipărește"]')?.click()
   })()`, true)
   let printState = null
-  for (let i = 0; i < 120; i++) {
-    printState = await win.webContents.executeJavaScript('window.__pdfPrintCapture', true)
+  for (let i = 0; i < 65; i++) {
+    printState = await win.webContents.executeJavaScript(`(async () => {
+      const frames = [...document.querySelectorAll('iframe[aria-hidden=true][src^="blob:"]')]
+      if (frames.length <= (window.__printBefore || 0)) return null
+      const frame = frames[frames.length - 1]
+      const data = await (await fetch(frame.src)).arrayBuffer()
+      return {
+        data: [...new Uint8Array(data)],
+        canvases: document.querySelectorAll('.page-slot canvas').length
+      }
+    })()`, true)
     if (printState) break
     await delay(200)
   }
-  console.log('[qa-web] pregătire imprimare:', printState)
-  const printReady = printState?.ready === 12 && printState.canvases === 12
+  const printPdf = printState ? await PDFDocument.load(Uint8Array.from(printState.data)) : null
+  const printReady = printPdf?.getPageCount() === 12 && printState.canvases < 12
+  console.log('[qa-web] imprimare vectorială:', {
+    pages: printPdf?.getPageCount(), canvases: printState?.canvases,
+    noForcedCanvases: printState?.canvases < 12
+  })
 
   // v1.1: exercise the actual Pages dialog through the browser save picker.
   const activePage = await win.webContents.executeJavaScript(
@@ -476,6 +482,26 @@ async function main() {
   }))()`, true)
   console.log('[qa-web] pagini / canvas active:', longState)
 
+  // Large print must use the PDF bytes and keep UI canvas virtualization.
+  await win.webContents.executeJavaScript(`(() => {
+    window.__largePrintBefore = document.querySelectorAll('iframe[aria-hidden=true][src^="blob:"]').length
+    document.querySelector('button[aria-label="Tipărește"]')?.click()
+  })()`, true)
+  let largePrint = null
+  for (let i = 0; i < 65; i++) {
+    largePrint = await win.webContents.executeJavaScript(`(async () => {
+      const frames = [...document.querySelectorAll('iframe[aria-hidden=true][src^="blob:"]')]
+      if (frames.length <= (window.__largePrintBefore || 0)) return null
+      const data = await (await fetch(frames[frames.length - 1].src)).arrayBuffer()
+      return [...new Uint8Array(data)]
+    })()`, true)
+    if (largePrint) break
+    await delay(200)
+  }
+  const longPrintPdf = largePrint ? await PDFDocument.load(Uint8Array.from(largePrint)) : null
+  const longPrintReady = longPrintPdf?.getPageCount() === 140
+  console.log('[qa-web] imprimare 140 pagini:', longPrintReady)
+
   // Codex P2 on PR #3: replacing a PDF during print preparation must
   // never print the replacement, even if it also contains 12 pages.
   await win.webContents.executeJavaScript(`(async () => {
@@ -489,8 +515,7 @@ async function main() {
   for (let n=0; n<12; n++) replacementDoc.addPage([400,500])
   const replacementBase64 = Buffer.from(await replacementDoc.save()).toString('base64')
   await win.webContents.executeJavaScript(`(() => {
-    window.__racePrinted = false
-    window.print = () => { window.__racePrinted = true }
+    window.__raceFrameCount = document.querySelectorAll('iframe[aria-hidden=true][src^="blob:"]').length
     document.querySelector('button[aria-label="Tipărește"]')?.click()
     const content = atob('${replacementBase64}')
     const input = new DataTransfer()
@@ -499,7 +524,8 @@ async function main() {
     window.dispatchEvent(new DragEvent('drop', {dataTransfer: input,bubbles:true,cancelable:true}))
   })()`, true)
   await delay(1600)
-  const racePrevented = await win.webContents.executeJavaScript('window.__racePrinted === false', true)
+  const racePrevented = await win.webContents.executeJavaScript(
+    'document.querySelectorAll(\'iframe[aria-hidden=true][src^="blob:"]\').length === window.__raceFrameCount', true)
   console.log('[qa-web] schimbare document anulează imprimarea:', racePrevented)
 
   // AcroForm Unicode regression through the full renderer path. The user
@@ -569,7 +595,7 @@ async function main() {
     unicodeInput, saved: Boolean(unicodeSavedBytes), unicodeEndToEnd
   })
 
-  const ok = unicodeEndToEnd && mergePickerImmediate && saveCopyWorked && pageToolsWorked && printReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
+  const ok = unicodeEndToEnd && mergePickerImmediate && saveCopyWorked && pageToolsWorked && printReady && longPrintReady && state.canvases > 0 && state.textLayers > 0 && state.total !== '—' &&
     uniqueRecents === 2 && invalidHandled && legacyMigration && emptyMigrationPreserved &&
     longState.slots === 140 && longState.canvases > 0 && longState.canvases < 20 && racePrevented
   console.log(ok ? '[qa-web] OK - randare, recents fara coliziuni, eroare controlata' : '[qa-web] FAILED - regressions detected')

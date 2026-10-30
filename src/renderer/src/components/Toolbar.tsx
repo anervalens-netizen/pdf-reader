@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { useApp, type Tool } from '../state/store'
+import { isDesktop } from '../lib/api'
 import { HIGHLIGHT_COLORS, INK_COLORS } from '../lib/annotations'
 import { Icon, type IconName } from './Icon'
 
@@ -9,15 +10,18 @@ const TOOLS: { id: Tool; icon: IconName; label: string; shortcut: string }[] = [
   { id: 'underline', icon: 'underline', label: 'Subliniere', shortcut: 'U' },
   { id: 'note', icon: 'note', label: 'Notiță', shortcut: 'N' },
   { id: 'draw', icon: 'pen', label: 'Desen', shortcut: 'D' },
+  { id: 'text', icon: 'text', label: 'Casetă text', shortcut: 'T' },
   { id: 'signature', icon: 'signature', label: 'Semnătură', shortcut: 'S' }
 ]
 
 export function Toolbar({
   onSignatureRequest,
-  onPagesRequest
+  onPagesRequest,
+  onAiRequest
 }: {
   onSignatureRequest: () => void
   onPagesRequest: () => void
+  onAiRequest: () => void
 }): JSX.Element {
   const {
     state,
@@ -28,6 +32,8 @@ export function Toolbar({
     toggleSidebar,
     setTool,
     setColor,
+    undoAnnotation,
+    redoAnnotation,
     saveCopy,
     print
   } = useApp()
@@ -176,6 +182,17 @@ export function Toolbar({
         </div>
       </div>
 
+      <div className="toolbar__group">
+        <button type="button" className="icon-btn" title="Anulează (Ctrl+Z)"
+          aria-label="Anulează modificarea" disabled={!state.history.undo} onClick={undoAnnotation}>
+          <Icon name="undo" />
+        </button>
+        <button type="button" className="icon-btn" title="Repetă (Ctrl+Y)"
+          aria-label="Repetă modificarea" disabled={!state.history.redo} onClick={redoAnnotation}>
+          <Icon name="redo" />
+        </button>
+      </div>
+
       <div className="toolbar__spacer" />
 
       <div className="toolbar__group">
@@ -191,6 +208,11 @@ export function Toolbar({
           <Icon name="search" />
         </button>
       </div>
+
+      {isDesktop && <button type="button" className="icon-btn" title="Întreabă ChatGPT despre document"
+        aria-label="Întreabă ChatGPT" disabled={!state.file} onClick={onAiRequest}>
+        <Icon name="sparkles" />
+      </button>}
 
       <div className="toolbar__divider" />
 

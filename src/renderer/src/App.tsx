@@ -11,7 +11,8 @@ import { Toasts } from './components/Toasts'
 import { ErrorPanel, Welcome } from './components/Welcome'
 import { SignatureDialog } from './components/SignatureDialog'
 import { PageToolsDialog } from './components/PageToolsDialog'
-import { createId, NOTE_COLOR, type Annotation } from './lib/annotations'
+import { AiPanel } from './components/AiPanel'
+import { createId, NOTE_COLOR, type Annotation, type TextAnnotation } from './lib/annotations'
 
 interface PendingNote {
   page: number
@@ -41,6 +42,10 @@ export default function App(): JSX.Element {
     toggleSidebar,
     setTool,
     addAnnotation,
+    updateAnnotation,
+    removeAnnotation,
+    undoAnnotation,
+    redoAnnotation,
     runSearch,
     goToHit,
     saveCopy,
@@ -49,9 +54,13 @@ export default function App(): JSX.Element {
 
   const [signatureOpen, setSignatureOpen] = useState(false)
   const [pagesOpen, setPagesOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [signatureImage, setSignatureImage] = useState<string | null>(null)
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null)
   const [noteText, setNoteText] = useState('')
+  const [pendingText, setPendingText] = useState<{ page: number; x: number; y: number; id?: string } | null>(null)
+  const [editText, setEditText] = useState('')
+  const [editFontSize, setEditFontSize] = useState(14)
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Android ACTION_VIEW: receive PDFs sent via "Open with" by file managers.
@@ -180,6 +189,17 @@ export default function App(): JSX.Element {
       const typing = isTypingTarget(event.target)
       const mod = event.ctrlKey || event.metaKey
 
+      if (mod && !typing && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redoAnnotation()
+        else undoAnnotation()
+        return
+      }
+      if (mod && !typing && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        redoAnnotation()
+        return
+      }
       if (mod && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         dispatch({ type: 'search/toggle', open: true })
@@ -267,6 +287,7 @@ export default function App(): JSX.Element {
           u: 'underline',
           n: 'note',
           d: 'draw',
+          t: 'text',
           v: 'select'
         }
         const tool = tools[event.key.toLowerCase()]
@@ -290,6 +311,8 @@ export default function App(): JSX.Element {
     setPage,
     setTool,
     goToHit,
+    undoAnnotation,
+    redoAnnotation,
     state.theme,
     state.tool,
     state.page,
@@ -317,10 +340,12 @@ export default function App(): JSX.Element {
   // a ref, so the native listener never closes over a stale render.
   const backHandlerRef = useRef<() => boolean>(() => false)
   backHandlerRef.current = (): boolean => {
+    if (aiOpen) { setAiOpen(false); return true }
     if (pagesOpen) {
       setPagesOpen(false)
       return true
     }
+    if (pendingText) { setPendingText(null); return true }
     if (pendingNote) {
       setPendingNote(null)
       setNoteText('')
@@ -364,6 +389,32 @@ export default function App(): JSX.Element {
     setTool('select')
   }, [pendingNote, noteText, addAnnotation, setTool])
 
+  const commitText = useCallback(() => {
+    if (!pendingText) return
+    const text = editText.trim().slice(0, 4000)
+    if (!text) {
+      if (pendingText.id) removeAnnotation(pendingText.id)
+      setPendingText(null)
+      return
+    }
+    const fontSize = Math.max(8, Math.min(48, editFontSize))
+    if (pendingText.id) {
+      const current = state.annotations.find((a) => a.id === pendingText.id && a.type === 'text') as TextAnnotation | undefined
+      if (current) updateAnnotation({ ...current, text, fontSize })
+    } else {
+      addAnnotation({
+        id: createId(),
+        type: 'text',
+        page: pendingText.page,
+        color: '#212529', opacity: 1, createdAt: Date.now(),
+        rect: [pendingText.x, Math.max(0, pendingText.y - 60), pendingText.x + 240, pendingText.y + 12],
+        fontSize, text
+      })
+    }
+    setPendingText(null)
+    setTool('select')
+  }, [pendingText, editText, editFontSize, state.annotations, addAnnotation, updateAnnotation, removeAnnotation, setTool])
+
   const placeSignature = useCallback(
     (page: number, x: number, y: number) => {
       if (!signatureImage) return
@@ -397,7 +448,7 @@ export default function App(): JSX.Element {
   return (
     <div className="app" data-platform={api.platform()}>
       <TitleBar />
-      <Toolbar onSignatureRequest={() => setSignatureOpen(true)} onPagesRequest={() => setPagesOpen(true)} />
+      <Toolbar onSignatureRequest={() => setSignatureOpen(true)} onPagesRequest={() => setPagesOpen(true)} onAiRequest={() => setAiOpen((open) => !open)} />
 
       <div className="app__body">
         {state.sidebarOpen && state.file && (
@@ -436,6 +487,16 @@ export default function App(): JSX.Element {
             <PageArea
               signatureImage={signatureImage}
               onPlaceSignature={placeSignature}
+              onRequestText={(page, x, y) => {
+                setEditText('')
+                setEditFontSize(14)
+                setPendingText({ page: page - 1, x, y })
+              }}
+              onEditText={(annotation) => {
+                setPendingText({ page: annotation.page, x: annotation.rect[0], y: annotation.rect[3], id: annotation.id })
+                setEditText(annotation.text)
+                setEditFontSize(annotation.fontSize)
+              }}
               onRequestNote={(page, x, y) => {
                 setPendingNote({ page: page - 1, x, y })
                 setNoteText('')
@@ -443,6 +504,7 @@ export default function App(): JSX.Element {
             />
           )}
         </main>
+        {aiOpen && isDesktop && <AiPanel onClose={() => setAiOpen(false)} />}
       </div>
 
       <StatusBar />
@@ -460,6 +522,31 @@ export default function App(): JSX.Element {
           toast('Semnătura e gata — click pe pagină pentru a o plasa.', 'info')
         }}
       />
+
+      {pendingText && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Casetă text">
+          <div className="modal modal--sm">
+            <header className="modal__header"><h2 className="modal__title">{pendingText.id ? 'Editează textul' : 'Adaugă text pe pagină'}</h2></header>
+            <div className="modal__body">
+              <textarea className="note-input" aria-label="Text de adăugat"
+                value={editText} maxLength={4000} autoFocus
+                onChange={(event) => setEditText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) commitText()
+                }} />
+              <label className="editor-font-label">Dimensiune font
+                <input type="number" min={8} max={48} value={editFontSize} onChange={(event) => setEditFontSize(Number(event.target.value) || 14)} />
+              </label>
+            </div>
+            <footer className="modal__footer">
+              {pendingText.id && <button type="button" className="btn" onClick={() => { removeAnnotation(pendingText.id!); setPendingText(null) }}>Șterge</button>}
+              <div className="modal__footer-spacer" />
+              <button type="button" className="btn" onClick={() => setPendingText(null)}>Renunță</button>
+              <button type="button" className="btn btn--primary" onClick={commitText}>Salvează</button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {pendingNote && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Adaugă notiță">

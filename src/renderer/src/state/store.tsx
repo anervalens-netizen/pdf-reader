@@ -11,6 +11,9 @@ import {
 import { api } from '../lib/api'
 import * as db from '../lib/db'
 import { fileToRecord } from '../lib/webApi'
+import { isNativeShell } from '../lib/native'
+import { printPdfBlob } from '../lib/printPdf'
+import { EditHistory } from '../lib/editHistory'
 import { loadDocument, type PDFDocumentProxy } from '../lib/pdf'
 import { buildPageIndex, findMatches } from '../lib/textIndex'
 import { fontForFormValues } from '../lib/unicodeFormFont'
@@ -23,7 +26,7 @@ import {
 } from '../lib/annotations'
 
 export type Theme = 'light' | 'dark' | 'system'
-export type Tool = 'select' | 'highlight' | 'underline' | 'note' | 'draw' | 'signature'
+export type Tool = 'select' | 'highlight' | 'underline' | 'note' | 'draw' | 'signature' | 'text'
 export type SidebarTab = 'thumbnails' | 'outline'
 export type ZoomMode = 'custom' | 'fit-width' | 'fit-page'
 export type PageOperation = 'rotate' | 'extract' | 'merge' | 'split'
@@ -67,6 +70,7 @@ export interface AppState {
   tool: Tool
   color: string
   annotations: Annotation[]
+  history: { undo: number; redo: number }
   outline: OutlineNode[] | null
   searchOpen: boolean
   query: string
@@ -94,6 +98,7 @@ const initialState: AppState = {
   tool: 'select',
   color: '#ffd94a',
   annotations: [],
+  history: { undo: 0, redo: 0 },
   outline: null,
   searchOpen: false,
   query: '',
@@ -122,6 +127,7 @@ type Action =
   | { type: 'annotations/set'; annotations: Annotation[] }
   | { type: 'annotations/add'; annotation: Annotation }
   | { type: 'annotations/remove'; id: string }
+  | { type: 'history/set'; counts: { undo: number; redo: number } }
   | { type: 'outline/set'; outline: OutlineNode[] | null }
   | { type: 'search/toggle'; open: boolean }
   | { type: 'search/query'; query: string }
@@ -188,6 +194,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, color: action.color }
     case 'annotations/set':
       return { ...state, annotations: action.annotations }
+    case 'history/set':
+      return { ...state, history: action.counts }
     case 'annotations/add':
       return { ...state, annotations: [...state.annotations, action.annotation] }
     case 'annotations/remove':
@@ -240,6 +248,9 @@ export interface AppContextValue {
   setColor: (color: string) => void
   addAnnotation: (annotation: Annotation) => void
   removeAnnotation: (id: string) => void
+  updateAnnotation: (annotation: Annotation) => void
+  undoAnnotation: () => void
+  redoAnnotation: () => void
   clearAnnotations: () => void
   runSearch: (query: string) => Promise<void>
   goToHit: (delta: number) => void
@@ -260,6 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   // Increased before each document load/close, independent of search events.
   const documentEpoch = useRef(0)
   const annotationsRef = useRef<Annotation[]>([])
+  const historyRef = useRef(new EditHistory())
   const annotationPathRef = useRef<string | null>(null)
   const annotationWritesRef = useRef<Map<string, Promise<void>>>(new Map())
 
@@ -359,6 +371,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         if (pendingAnnotations) await pendingAnnotations
         const stored = (await db.getAnnotations(file.path)) as Annotation[] | undefined
         annotationPathRef.current = file.path
+        historyRef.current.reset()
+        dispatch({ type: 'history/set', counts: historyRef.current.counts })
         annotationsRef.current = stored ?? []
         dispatch({
           type: 'file/opened',
@@ -438,6 +452,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     dataRef.current = null
     annotationPathRef.current = null
     annotationsRef.current = []
+    historyRef.current.reset()
+    dispatch({ type: 'history/set', counts: historyRef.current.counts })
     dispatch({ type: 'file/closed' })
   }, [])
 
@@ -463,25 +479,44 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const setTool = useCallback((tool: Tool) => dispatch({ type: 'tool/set', tool }), [])
   const setColor = useCallback((color: string) => dispatch({ type: 'color/set', color }), [])
 
-  const addAnnotation = useCallback((annotation: Annotation) => {
-    const next = [...annotationsRef.current, annotation]
+  const persistAnnotations = useCallback((next: Annotation[], recordHistory: boolean) => {
+    const before = annotationsRef.current
+    if (before === next || !annotationPathRef.current) return
+    if (recordHistory) historyRef.current.record(before, next)
     annotationsRef.current = next
     dispatch({ type: 'annotations/set', annotations: next })
-    if (annotationPathRef.current) queueAnnotations(annotationPathRef.current, next)
+    dispatch({ type: 'history/set', counts: historyRef.current.counts })
+    queueAnnotations(annotationPathRef.current, next)
   }, [queueAnnotations])
+
+  const addAnnotation = useCallback((annotation: Annotation) => {
+    persistAnnotations([...annotationsRef.current, annotation], true)
+  }, [persistAnnotations])
+
+  const updateAnnotation = useCallback((annotation: Annotation) => {
+    const old = annotationsRef.current.find((item) => item.id === annotation.id)
+    if (!old || old.type !== annotation.type) return
+    persistAnnotations(annotationsRef.current.map((item) => item.id === annotation.id ? annotation : item), true)
+  }, [persistAnnotations])
 
   const removeAnnotation = useCallback((id: string) => {
-    const next = annotationsRef.current.filter((item) => item.id !== id)
-    annotationsRef.current = next
-    dispatch({ type: 'annotations/set', annotations: next })
-    if (annotationPathRef.current) queueAnnotations(annotationPathRef.current, next)
-  }, [queueAnnotations])
+    if (!annotationsRef.current.some((item) => item.id === id)) return
+    persistAnnotations(annotationsRef.current.filter((item) => item.id !== id), true)
+  }, [persistAnnotations])
 
   const clearAnnotations = useCallback(() => {
-    annotationsRef.current = []
-    dispatch({ type: 'annotations/set', annotations: [] })
-    if (annotationPathRef.current) queueAnnotations(annotationPathRef.current, [])
-  }, [queueAnnotations])
+    if (annotationsRef.current.length) persistAnnotations([], true)
+  }, [persistAnnotations])
+
+  const undoAnnotation = useCallback(() => {
+    const previous = historyRef.current.undo(annotationsRef.current)
+    if (previous) persistAnnotations(previous, false)
+  }, [persistAnnotations])
+
+  const redoAnnotation = useCallback(() => {
+    const next = historyRef.current.redo(annotationsRef.current)
+    if (next) persistAnnotations(next, false)
+  }, [persistAnnotations])
 
   const runSearch = useCallback(
     async (query: string) => {
@@ -582,7 +617,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       }
       const formValues = await collectFormValues()
       const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
-      const unicodeFontBytes = await fontForFormValues(formValues)
+      const unicodeFontBytes = await fontForFormValues([...formValues, { name: '__pdf_editor_text__', type: 'text', value: annotations.filter((a) => a.type === 'text').map((a) => a.text).join('\\n') }])
       const result = await exportAnnotatedPdf(data, annotations, { formValues, unicodeFontBytes })
       const baseName = file.name.replace(/\.pdf$/i, '')
       const saved = await api.saveFile({
@@ -630,7 +665,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const values = await collectFormValues()
       if (documentEpoch.current !== epoch) throw new Error('Documentul s-a schimbat în timpul operației.')
       const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
-      const unicodeFontBytes = await fontForFormValues(values)
+      const unicodeFontBytes = await fontForFormValues([...values, { name: '__pdf_editor_text__', type: 'text', value: annotations.filter((a) => a.type === 'text').map((a) => a.text).join('\\n') }])
       const prepared = await exportAnnotatedPdf(source, annotations, { formValues: values, unicodeFontBytes })
       const base = file.name.replace(/\.pdf$/i, '')
       const save = async (data: ArrayBuffer, name: string): Promise<boolean> => {
@@ -690,44 +725,35 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   }, [state.file, state.page, state.numPages, state.annotations, state.saving, collectFormValues, refreshRecents, toast])
 
   const print = useCallback(() => {
-    if (!docRef.current || printInProgress.current) return
-    // A long document must never silently print blank distant pages or
-    // exhaust memory by forcing hundreds of full-resolution canvases.
-    if (state.numPages > 35) {
-      toast('Pentru mai mult de 35 de pagini, salvează PDF-ul și tipărește din cititorul sistemului.', 'info')
+    if (printInProgress.current || !state.file || !docRef.current) return
+    // Android WebView lacks a reliable inline PDF print viewer.
+    if (isNativeShell()) {
+      toast('Pe Android, salvează o copie și imprim-o din aplicația sistemului.', 'info')
       return
     }
-    const requestedDocument = docRef.current
-    const requestedEpoch = documentEpoch.current
+    const epoch = documentEpoch.current
+    const source = dataRef.current
+    if (!source) return
     printInProgress.current = true
     dispatch({ type: 'printing/set', printing: true })
     void (async () => {
-      const limit = Date.now() + 25000
-      while (Date.now() < limit) {
-        if (docRef.current !== requestedDocument || documentEpoch.current !== requestedEpoch || state.status !== 'ready') {
-          throw new Error('Documentul s-a schimbat în timpul pregătirii tipăririi.')
-        }
-        const pages = document.querySelectorAll('.page-slot .page[data-print-ready="true"]').length
-        if (pages === state.numPages) {
-          // Print only after all page render tasks and annotation layers finish.
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-          if (docRef.current !== requestedDocument || documentEpoch.current !== requestedEpoch) {
-            throw new Error('Documentul s-a schimbat înainte de imprimare.')
-          }
-          window.print()
-          return
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 100))
-      }
-      throw new Error('Unele pagini nu au putut fi pregătite pentru tipărire.')
+      const pending = annotationWritesRef.current.get(state.file!.path)
+      if (pending) await pending
+      const values = await collectFormValues()
+      if (epoch !== documentEpoch.current) throw new Error('Documentul s-a schimbat în timpul pregătirii.')
+      const annotations = annotationsRef.current
+      const unicodeFontBytes = await fontForFormValues([...values, { name: '__pdf_editor_text__', type: 'text', value: annotations.filter((a) => a.type === 'text').map((a) => a.text).join('\\n') }])
+      const result = await exportAnnotatedPdf(source, annotations, { formValues: values, unicodeFontBytes })
+      if (result.warnings.length) toast('PDF conține avertizări. Verifică semnăturile digitale și formularele.', 'info')
+      await printPdfBlob(result.data)
     })().catch((error) => {
-      console.error('[print] page preparation failed', error)
-      toast('Tipărirea a fost anulată: ' + String(error), 'error')
+      console.error('[print] vector PDF print failed', error)
+      toast('Imprimarea nu a reușit: ' + String(error) + '. Poți salva o copie PDF.', 'error')
     }).finally(() => {
       printInProgress.current = false
       dispatch({ type: 'printing/set', printing: false })
     })
-  }, [state.numPages, state.status, toast])
+  }, [state.file, collectFormValues, toast])
 
   // Persist the reading session (page + zoom) for the next launch.
   useEffect(() => {
@@ -767,6 +793,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       setColor,
       addAnnotation,
       removeAnnotation,
+      updateAnnotation,
+      undoAnnotation,
+      redoAnnotation,
       clearAnnotations,
       runSearch,
       goToHit,
@@ -790,6 +819,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       setColor,
       addAnnotation,
       removeAnnotation,
+      updateAnnotation,
+      undoAnnotation,
+      redoAnnotation,
       clearAnnotations,
       runSearch,
       goToHit,

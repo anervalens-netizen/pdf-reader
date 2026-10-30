@@ -33,6 +33,8 @@ jobs:
           npm run test:export
           npm run test:sw
           npm run test:pages
+          npm run test:edit
+          npm run test:text
 
       - name: Build instalator
         run: npm run dist:win
@@ -73,6 +75,8 @@ jobs:
           npm run test:export
           npm run test:sw
           npm run test:pages
+          npm run test:edit
+          npm run test:text
 
       - name: Build pachete
         run: npm run dist:linux
@@ -87,6 +91,7 @@ jobs:
           path: |
             release/PDF-*.AppImage
             release/PDF-*.deb
+            release/latest-linux.yml
 
   android:
     name: Android - APK
@@ -123,6 +128,8 @@ jobs:
           npm run test:export
           npm run test:sw
           npm run test:pages
+          npm run test:edit
+          npm run test:text
 
       - name: Build web + sincronizează shell-ul Android
         run: |
@@ -213,5 +220,6 @@ jobs:
             artifacts/latest.yml
             artifacts/PDF-*.AppImage
             artifacts/PDF-*.deb
+            artifacts/latest-linux.yml
             artifacts/app-debug.apk
             artifacts-release/app-release.apk

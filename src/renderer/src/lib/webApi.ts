@@ -207,6 +207,10 @@ export const webApi: PdfApi = {
     /* no file system to reveal */
   },
 
+  async downloadUpdate(): Promise<{ status: string; version?: string; message?: string }> {
+    return { status: 'unsupported', message: 'Actualizările desktop nu sunt disponibile aici.' }
+  },
+
   async checkForUpdates(): Promise<{ status: string; version?: string; message?: string }> {
     return { status: 'unsupported', message: 'Actualizările automate sunt disponibile doar pe desktop.' }
   },

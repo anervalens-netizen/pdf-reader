@@ -133,6 +133,23 @@ export async function runCaptureSequence(
     await capture('06-exported-pdf')
   }
 
+  if (process.env.PDF_CAPTURE_AI_CHECK) {
+    const probe = await win.webContents.executeJavaScript(`(async () => {
+      const status = await window.pdfAi?.status()
+      const update = await window.pdf?.checkForUpdates()
+      const button = document.querySelector('button[aria-label="Întreabă ChatGPT"]')
+      button?.click()
+      await new Promise(resolve => setTimeout(resolve, 300))
+      return { disconnected: status?.connected === false,
+        aiPanel: Boolean(document.querySelector('.ai-panel')),
+        updateDevUnsupported: update?.status === 'unsupported' }
+    })()`, true)
+    if (!probe.disconnected || !probe.aiPanel || !probe.updateDevUnsupported) {
+      throw new Error('Native AI or update IPC smoke failed: ' + JSON.stringify(probe))
+    }
+    console.log('[capture] AI status IPC and opt-in panel validated; no account login attempted')
+  }
+
   console.log('[capture] done')
 
   // Round-trip check for the file writing IPC path.

@@ -1381,3 +1381,75 @@ body.is-dragging::after {
     page-break-inside: avoid;
   }
 }
+
+/* Editable text overlays are view-only until clicked to open the editor. */
+.page__text {
+  position: absolute;
+  z-index: 6;
+  display: block;
+  padding: 2px 3px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  font-family: Arial, sans-serif;
+  white-space: pre-wrap;
+  overflow: hidden;
+  line-height: 1.25;
+  user-select: none;
+  cursor: text;
+}
+.page__text:hover, .page__text:focus-visible {
+  border-color: #1971c2;
+  background: rgba(255,255,255,.15);
+}
+.editor-font-label { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.editor-font-label input { width: 72px; padding: 6px; border: 1px solid var(--border); background: var(--bg); }
+@media print { .page__text { border: 0 !important; } }
+
+.signature-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.signature-photo { display: flex; flex-direction: column; gap: 10px; min-height: 150px; }
+.signature-photo__preview { display: block; width: 100%; max-height: 180px; object-fit: contain; border: 1px dashed var(--border); background: #fff; }
+.signature-photo__error { color: #d53535; }
+.signature-sensitivity { display: flex; align-items: center; gap: 12px; }
+.signature-sensitivity input { flex: 1; }
+
+/* Optional desktop-only ChatGPT side panel. */
+.ai-panel {
+  position: absolute; right: 0; top: 0; bottom: 0; z-index: 18;
+  width: min(390px, 96vw); background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  box-shadow: -10px 0 32px rgba(0,0,0,.15);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.ai-panel__header {
+  padding: 14px 13px; display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.ai-panel__header strong { display: flex; gap: 9px; align-items: center; font-size: 14px; }
+.ai-panel__empty { padding: 22px 18px; line-height: 1.5; }
+.ai-panel__empty h3 { margin: 0 0 10px; font-size: 15px; }
+.ai-panel__empty p { color: var(--text-muted); }
+.ai-panel__account {
+  padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.ai-panel__account span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-panel__account button { border: 0; background: none; cursor: pointer; color: var(--text-muted); }
+.ai-panel__config { padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.ai-panel__config label { font-size: 12px; }
+.ai-panel__config select { flex: 1; min-width: 0; padding: 7px; color: var(--text); background: var(--surface); border: 1px solid var(--border); }
+.ai-panel__messages { padding: 12px; overflow-y: auto; flex: 1; min-height: 0; }
+.ai-panel__placeholder { color: var(--text-muted); line-height: 1.55; }
+.ai-message { padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; overflow-wrap: anywhere; }
+.ai-message--user { background: var(--surface-2); }
+.ai-message__role { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 5px; }
+.ai-message__text { white-space: pre-wrap; user-select: text; line-height: 1.55; }
+.ai-page-ref { border: 0; background: transparent; padding: 0 2px; text-decoration: underline; cursor: pointer; color: var(--accent); }
+.ai-panel__compose { padding: 12px; border-top: 1px solid var(--border); }
+.ai-panel__compose textarea { width: 100%; resize: vertical; min-height: 65px; padding: 9px; user-select: text; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 5px; }
+.ai-panel__actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 7px; }
+.ai-panel__actions small { line-height: 1.3; font-size: 10px; color: var(--text-muted); }
+.ai-panel__error { padding: 12px; color: #e04545; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+
+.update-check-label { display: flex; gap: 10px; align-items: center; font-size: 12px; cursor: pointer; user-select: text; }
+.update-check-label input { cursor: pointer; }

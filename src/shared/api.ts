@@ -39,6 +39,28 @@ export interface SaveResult {
   error?: string
 }
 
+export interface AiStatus {
+  connected: boolean
+  email: string
+  name: string
+  encrypted: boolean
+}
+export interface AiResponseEvent {
+  id: string
+  type: 'delta' | 'done' | 'error'
+  text?: string
+  message?: string
+}
+export interface PdfAiApi {
+  status(): Promise<AiStatus>
+  signIn(): Promise<{ ok: boolean; error?: string; status?: AiStatus }>
+  signOut(): Promise<AiStatus>
+  models(): Promise<{ ok: boolean; models?: { id: string; name: string }[]; error?: string }>
+  ask(request: { id: string; model: string; instructions: string; messages: { role: 'user' | 'assistant'; content: string }[] }): Promise<{ accepted: boolean }>
+  cancel(id: string): Promise<boolean>
+  onEvent(handler: (event: AiResponseEvent) => void): () => void
+}
+
 export interface PdfApi {
   appInfo(): Promise<AppInfo>
   platform(): Platform
@@ -53,6 +75,7 @@ export interface PdfApi {
   openExternal(url: string): Promise<void>
   showItemInFolder(path: string): Promise<void>
   checkForUpdates(): Promise<{ status: string; version?: string; message?: string }>
+  downloadUpdate(): Promise<{ status: string; version?: string; message?: string }>
   onMenuAction(handler: (action: string) => void): () => void
   onFileOpened(handler: (payload: { path: string; name: string }) => void): () => void
   rendererReady(): void

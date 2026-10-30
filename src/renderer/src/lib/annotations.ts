@@ -1,8 +1,8 @@
-import { PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, rgb, BlendMode, LineCapStyle, type PDFPage } from 'pdf-lib'
+import { PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, rgb, BlendMode, LineCapStyle, StandardFonts, type PDFPage } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { PdfQuad, PdfRect } from './geometry'
 
-export type AnnotationType = 'highlight' | 'underline' | 'note' | 'ink' | 'signature'
+export type AnnotationType = 'highlight' | 'underline' | 'note' | 'ink' | 'signature' | 'text'
 
 interface AnnotationBase {
   id: string
@@ -32,6 +32,13 @@ export interface InkAnnotation extends AnnotationBase {
   width: number
 }
 
+export interface TextAnnotation extends AnnotationBase {
+  type: 'text'
+  rect: PdfRect
+  text: string
+  fontSize: number
+}
+
 export interface SignatureAnnotation extends AnnotationBase {
   type: 'signature'
   rect: PdfRect
@@ -43,6 +50,7 @@ export type Annotation =
   | NoteAnnotation
   | InkAnnotation
   | SignatureAnnotation
+  | TextAnnotation
 
 export const HIGHLIGHT_COLORS = ['#ffd94a', '#8ce99a', '#74c0fc', '#ffa8c5', '#ff922b'] as const
 export const INK_COLORS = ['#e03131', '#2f9e44', '#1971c2', '#f08c00', '#212529'] as const
@@ -220,6 +228,29 @@ export async function exportAnnotatedPdf(
         }
         case 'signature': {
           await drawSignature(pdfDoc, page, annotation)
+          break
+        }
+        case 'text': {
+          const text = annotation.text.slice(0, 4000)
+          if (!text.trim()) break
+          const needsUnicode = /[^\u0000-\u007f]/u.test(text)
+          if (needsUnicode && !options.unicodeFontBytes?.byteLength) {
+            warnings.push('Caseta de text Unicode nu poate fi exportată: lipsește fontul.')
+            break
+          }
+          const font = needsUnicode
+            ? (pdfDoc.registerFontkit(fontkit), await pdfDoc.embedFont(options.unicodeFontBytes!, { subset: true }))
+            : await pdfDoc.embedFont(StandardFonts.Helvetica)
+          const [x0, , x1, y1] = annotation.rect
+          const size = Math.min(72, Math.max(6, annotation.fontSize))
+          const rgbColor = hexToRgb(annotation.color)
+          page.drawText(text, {
+            x: x0, y: y1 - size * 1.2,
+            size, font, maxWidth: Math.max(20, x1 - x0),
+            lineHeight: size * 1.25,
+            color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
+            opacity: annotation.opacity
+          })
           break
         }
       }
