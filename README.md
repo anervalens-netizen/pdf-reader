@@ -9,7 +9,7 @@ Un singur renderer (React + PDF.js) este folosit pe următoarele ținte:
 
 | Țintă | Formă | Status |
 | --- | --- | --- |
-| **Windows** | instalator NSIS (`PDF-Setup-1.2.0.exe`) | CI Windows verificat; instalarea nativă este de confirmat |
+| **Windows** | instalator NSIS (`PDF-Setup-1.2.1.exe`) | CI Windows verificat; instalarea nativă este de confirmat |
 | **Linux** | AppImage + `deb` | pachetul `deb` 1.1.1 instalat și testat pe Dell |
 | **Android** | APK semnat (Capacitor) + PWA instalabilă | APK 1.1.1 instalat și testat pe OnePlus 6T |
 | **Web** | PWA instalabilă, funcționează offline | gata |
@@ -19,6 +19,16 @@ Descărcările sunt în [Releases](https://github.com/anervalens-netizen/pdf-rea
 În release-urile 1.1.2 și 1.2.0, folosește `app-release.apk` pentru Android;
 `app-debug.apk` este destinat depanării și folosește altă semnătură. Actualizarea directă
 de la debug la release nu este posibilă fără migrarea datelor aplicației.
+
+---
+
+## Versiunea 1.2.1 — icon Fluent și navigare completă
+
+- Identitate vizuală nouă: pictogramă PDF turcoaz/albastru/violet, vectorială, cu fundal transparent în exterior, pentru Windows, Linux, Android, PWA și splash.
+- Bara de meniu vizibilă pe desktop: **Fișier**, **Editare**, **Vizualizare**, **Instrumente**, **Setări**, **Ajutor**. Acțiunile sunt conectate la funcțiile existente, inclusiv documente recente, salvarea unei copii, imprimare și organizarea paginilor.
+- Meniu compact cu trei puncte pe Android/PWA, cu acces la funcții și ferestrele **Preferințe** / **Despre PDF**.
+- Setări efective pentru temă (sistem/luminos/întunecat) și pentru verificarea automată a actualizărilor pe desktop; meniul nativ Electron nu mai trimite „Despre” la un link fictiv.
+- Teste de regresie mobile pentru meniu, preferințe și About, plus testele PDF existente. Datele și semnăturile release-urilor anterioare rămân nemodificate.
 
 ---
 
@@ -105,7 +115,7 @@ PDF_CAPTURE_DIR=qa PDF_CAPTURE_PDF=samples/pdf-sample.pdf npx electron .
 ### Packaging
 
 ```bash
-npm run dist:win     # instalator NSIS: release/PDF-Setup-1.2.0.exe
+npm run dist:win     # instalator NSIS: release/PDF-Setup-1.2.1.exe
 npm run dist:linux   # AppImage + deb
 ```
 

@@ -5,6 +5,7 @@ import { AppProvider } from './state/store'
 import { isDesktop } from './lib/api'
 import './styles/theme.css'
 import './styles/app.css'
+import './styles/menus.css'
 import './styles/pdfjs.css'
 
 createRoot(document.getElementById('root')!).render(

@@ -1,0 +1,43 @@
+
+/* Application menus: visible on desktop; compact overflow on Android/PWA. */
+.app--desktop { grid-template-rows: var(--titlebar-h) 34px var(--toolbar-h) minmax(0, 1fr) var(--status-h); }
+.app-menu { font-size: 12px; -webkit-app-region: no-drag; }
+.app-menu--desktop {
+  display: flex; align-items: stretch; padding: 0 8px;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  position: relative; z-index: 25;
+}
+.app-menu__anchor { position: relative; display: flex; align-items: center; }
+.app-menu__trigger {
+  border: 0; background: transparent; padding: 7px 13px;
+  border-radius: 5px; cursor: pointer; color: var(--text); white-space: nowrap;
+}
+.app-menu__trigger:hover, .app-menu__trigger.is-active { background: var(--accent-soft); }
+.app-menu__popup {
+  position: absolute; left: 0; top: 100%; min-width: 215px; max-width: min(340px, 90vw);
+  max-height: min(560px, 72vh); overflow: auto; z-index: 50;
+  padding: 6px; background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 9px; box-shadow: var(--shadow-md);
+}
+.app-menu__section { padding: 2px 0; }
+.app-menu__item {
+  display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 5px;
+  background: transparent; text-align: left; cursor: pointer; color: var(--text);
+}
+.app-menu__item:hover:not(:disabled), .app-menu__item:focus-visible { background: var(--accent-soft); }
+.app-menu__item:disabled { opacity: 0.4; cursor: not-allowed; }
+.app-menu__truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-menu__heading { font-size: 10.5px; font-weight: 650; color: var(--text-muted); padding: 8px 11px 4px; }
+.app-menu__separator { height: 1px; background: var(--border); margin: 5px 7px; }
+.app-menu--mobile { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 5px); right: calc(env(safe-area-inset-right, 0px) + 8px); z-index: 55; }
+.app-menu__trigger--mobile { font-size: 25px; line-height: 28px; min-width: 39px; height: 34px; padding: 0; }
+.app-menu__popup--mobile { right: 0; left: auto; top: calc(100% + 4px); min-width: 225px; max-height: min(75dvh, 640px); }
+.app-menu__popup--mobile .app-menu__section + .app-menu__section { border-top: 1px solid var(--border); }
+.app-menu__modal { z-index: 100; }
+.app-menu__body { display: flex; flex-direction: column; gap: 10px; }
+.app-menu__fieldset { border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 9px; }
+.app-menu__fieldset label, .app-menu__checkbox { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.app-menu__muted { color: var(--text-muted); font-size: 12px; }
+@media (max-width: 650px) {
+  .titlebar__titles { padding-right: 42px; }
+}

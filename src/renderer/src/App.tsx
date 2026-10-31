@@ -3,6 +3,7 @@ import { useApp, type Tool } from './state/store'
 import { api, isDesktop } from './lib/api'
 import { registerBackHandler, registerPdfIntentHandler } from './lib/native'
 import { TitleBar } from './components/TitleBar'
+import { AppMenu } from './components/AppMenu'
 import { Toolbar } from './components/Toolbar'
 import { Sidebar } from './components/Sidebar'
 import { PageArea } from './components/PageArea'
@@ -446,8 +447,9 @@ export default function App(): JSX.Element {
   }, [])
 
   return (
-    <div className="app" data-platform={api.platform()}>
+    <div className={isDesktop ? "app app--desktop" : "app"} data-platform={api.platform()}>
       <TitleBar />
+      <AppMenu variant={isDesktop ? "desktop" : "mobile"} onSignature={() => setSignatureOpen(true)} onPages={() => setPagesOpen(true)} onAi={() => setAiOpen((open) => !open)} />
       <Toolbar onSignatureRequest={() => setSignatureOpen(true)} onPagesRequest={() => setPagesOpen(true)} onAiRequest={() => setAiOpen((open) => !open)} />
 
       <div className="app__body">

@@ -21,7 +21,7 @@ export function TitleBar(): JSX.Element {
     <header className="titlebar" data-ta-drag-region>
       <div className="titlebar__left" data-ta-drag-region>
         <span className="titlebar__mark" aria-hidden="true">
-          <Icon name="file" size={16} />
+          <img src="./icons/icon-192.png" alt="" width={24} height={24} />
         </span>
         <span className="titlebar__titles" data-ta-drag-region>
           <span className="titlebar__title">{state.file?.name ?? 'PDF'}</span>

@@ -1,4 +1,4 @@
-import { app, Menu, shell, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
+import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
 
 export function buildApplicationMenu(getWindow: () => BrowserWindow | null): void {
   const send = (action: string): void => {
@@ -29,6 +29,7 @@ export function buildApplicationMenu(getWindow: () => BrowserWindow | null): voi
       label: 'Fișier',
       submenu: [
         { label: 'Deschide…', accelerator: 'CmdOrCtrl+O', click: () => send('open') },
+        { label: 'Deschise recent…', click: () => send('recent') },
         { type: 'separator' },
         { label: 'Salvează o copie…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-as') },
         { label: 'Tipărește…', accelerator: 'CmdOrCtrl+P', click: () => send('print') },
@@ -65,13 +66,14 @@ export function buildApplicationMenu(getWindow: () => BrowserWindow | null): voi
       ]
     },
     {
+      label: 'Setări', submenu: [{ label: 'Preferințe…', click: () => send('settings') }]
+    },
+    {
       label: 'Ajutor',
       submenu: [
         {
           label: 'Despre PDF',
-          click: () => {
-            void shell.openExternal('https://example.invalid')
-          }
+          click: () => send('about')
         }
       ]
     }
