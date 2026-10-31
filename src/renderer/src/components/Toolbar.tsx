@@ -137,7 +137,7 @@ export function Toolbar({
             title={`${tool.label} (${tool.shortcut})`}
             aria-label={tool.label}
             aria-pressed={state.tool === tool.id}
-            disabled={!state.file}
+            disabled={state.status !== 'ready'}
             onClick={() => {
               if (tool.id === 'signature') {
                 onSignatureRequest()
@@ -202,7 +202,7 @@ export function Toolbar({
           title="Caută (Ctrl+F)"
           aria-label="Caută"
           aria-pressed={state.searchOpen}
-          disabled={!state.file}
+          disabled={state.status !== 'ready'}
           onClick={() => dispatch({ type: 'search/toggle', open: !state.searchOpen })}
         >
           <Icon name="search" />
@@ -210,7 +210,7 @@ export function Toolbar({
       </div>
 
       {isDesktop && <button type="button" className="icon-btn" title="Întreabă ChatGPT despre document"
-        aria-label="Întreabă ChatGPT" disabled={!state.file} onClick={onAiRequest}>
+        aria-label="Întreabă ChatGPT" disabled={state.status !== 'ready'} onClick={onAiRequest}>
         <Icon name="sparkles" />
       </button>}
 
@@ -222,7 +222,7 @@ export function Toolbar({
           className="icon-btn"
           title="Micșorează (Ctrl+−)"
           aria-label="Micșorează"
-          disabled={!state.file}
+          disabled={state.status !== 'ready'}
           onClick={() => zoomBy(1 / 1.15)}
         >
           <Icon name="zoomOut" />
@@ -231,7 +231,7 @@ export function Toolbar({
           type="button"
           className="zoom-readout"
           title="Resetare zoom (Ctrl+0)"
-          disabled={!state.file}
+          disabled={state.status !== 'ready'}
           onClick={() => setZoom(1)}
         >
           {Math.round(state.zoom * 100)}%
@@ -241,7 +241,7 @@ export function Toolbar({
           className="icon-btn"
           title="Mărește (Ctrl++)"
           aria-label="Mărește"
-          disabled={!state.file}
+          disabled={state.status !== 'ready'}
           onClick={() => zoomBy(1.15)}
         >
           <Icon name="zoomIn" />
@@ -251,7 +251,7 @@ export function Toolbar({
           className="icon-btn"
           title="Potrivește lățimea (Ctrl+1)"
           aria-label="Potrivește lățimea"
-          disabled={!state.file}
+          disabled={state.status !== 'ready'}
           onClick={() => setZoom(state.zoom, 'fit-width')}
         >
           <Icon name="fitWidth" />
@@ -261,7 +261,7 @@ export function Toolbar({
           className="icon-btn"
           title="Potrivește pagina (Ctrl+2)"
           aria-label="Potrivește pagina"
-          disabled={!state.file}
+          disabled={state.status !== 'ready'}
           onClick={() => setZoom(state.zoom, 'fit-page')}
         >
           <Icon name="fitPage" />
@@ -276,7 +276,7 @@ export function Toolbar({
           className="icon-btn"
           title="Operații pagini: rotire, extragere, combinare, separare"
           aria-label="Operații pagini"
-          disabled={!state.file || state.saving}
+          disabled={state.status !== 'ready' || state.saving}
           onClick={onPagesRequest}
         >
           <Icon name="pages" />
@@ -286,7 +286,7 @@ export function Toolbar({
           className="icon-btn"
           title="Tipărește (Ctrl+P)"
           aria-label="Tipărește"
-          disabled={!state.file}
+          disabled={state.status !== 'ready'}
           onClick={print}
         >
           <Icon name="printer" />
@@ -296,7 +296,7 @@ export function Toolbar({
           className="icon-btn"
           title="Salvează o copie (Ctrl+Shift+S)"
           aria-label="Salvează o copie"
-          disabled={!state.file || state.saving}
+          disabled={state.status !== 'ready' || state.saving}
           onClick={() => void saveCopy()}
         >
           <Icon name="save" />

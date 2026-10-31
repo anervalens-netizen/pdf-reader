@@ -146,7 +146,12 @@ function reducer(state: AppState, action: Action): AppState {
     case 'theme/set':
       return { ...state, theme: action.theme }
     case 'file/loading':
-      return { ...state, file: action.file, status: 'loading', error: null, needsPassword: false }
+      return {
+        ...state, file: action.file, status: 'loading', error: null,
+        needsPassword: false, annotations: [], outline: null,
+        numPages: 0, page: 1, history: { undo: 0, redo: 0 },
+        hits: [], hitIndex: -1, query: '', searchOpen: false
+      }
     case 'file/opened':
       return {
         ...state,
@@ -338,18 +343,27 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const loadFile = useCallback(
     async (file: { path: string; name: string; size: number; data: ArrayBuffer }, password?: string) => {
-      // Cancel in-flight print preparation and searches before replacing PDF.
-      documentEpoch.current += 1
+      // A pending password prompt must never be paired with the previous PDF.
+      const epoch = ++documentEpoch.current
       printAbortRef.current?.abort()
       searchToken.current += 1
+      const previous = docRef.current
+      docRef.current = null
+      dataRef.current = null
+      annotationPathRef.current = null
+      annotationsRef.current = []
+      historyRef.current.reset()
+      if (previous) void previous.cleanup()
       dispatch({ type: 'file/loading', file: { path: file.path, name: file.name, size: file.size } })
       try {
         // PDF.js transfers its input ArrayBuffer to the worker, detaching it.
         // Keep the original bytes intact for Save Copy and page operations.
         const doc = await loadDocument(file.data.slice(0), { password })
-        const oldDocument = docRef.current
+        if (epoch !== documentEpoch.current) {
+          void doc.cleanup()
+          return
+        }
         docRef.current = doc
-        if (oldDocument && oldDocument !== doc) void oldDocument.cleanup()
         dataRef.current = file.data
 
         let outline: OutlineNode[] | null = null
@@ -373,6 +387,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         const pendingAnnotations = annotationWritesRef.current.get(file.path)
         if (pendingAnnotations) await pendingAnnotations
         const stored = (await db.getAnnotations(file.path)) as Annotation[] | undefined
+        if (epoch !== documentEpoch.current || docRef.current !== doc) return
         annotationPathRef.current = file.path
         historyRef.current.reset()
         dispatch({ type: 'history/set', counts: historyRef.current.counts })
@@ -386,9 +401,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         if (stored?.length) dispatch({ type: 'annotations/set', annotations: stored })
 
         await db.touchRecent({ path: file.path, name: file.name, size: file.size })
+        if (epoch !== documentEpoch.current) return
         await refreshRecents()
 
         const session = await db.getSession(file.path)
+        if (epoch !== documentEpoch.current) return
         if (session) {
           dispatch({ type: 'page/set', page: session.page })
           // Only a custom zoom is restored; fit modes are recomputed for the
@@ -398,6 +415,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           }
         }
       } catch (error) {
+        if (epoch !== documentEpoch.current) return
         const err = error as { name?: string; message?: string }
         if (err?.name === 'PasswordException') {
           dispatch({ type: 'file/needs-password' })
@@ -609,7 +627,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     const doc = docRef.current
     const file = state.file
     const data = dataRef.current
-    if (!doc || !file || !data) return
+    if (!doc || !file || !data || state.status !== 'ready') return
 
     dispatch({ type: 'saving/set', saving: true })
     try {
@@ -659,7 +677,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const pageOperation = useCallback(async (operation: PageOperation, selection = ''): Promise<boolean> => {
     const file = state.file
     const source = dataRef.current
-    if (!file || !source || state.saving) return false
+    if (!file || !source || state.saving || state.status !== 'ready') return false
     const epoch = documentEpoch.current
     dispatch({ type: 'saving/set', saving: true })
     try {
@@ -737,7 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const print = useCallback(() => {
     const doc = docRef.current
     const file = state.file
-    if (printInProgress.current || !doc || !file) return
+    if (printInProgress.current || !doc || !file || state.status !== 'ready') return
     if (isNativeShell()) {
       toast('Pe Android, salvează o copie și imprim-o din aplicația sistemului.', 'info')
       return

@@ -38,3 +38,16 @@
 
 Checks: test:ai, test:text, test:mobile, test:encrypted, test:web,
 test:export, typecheck, build and npm audit. GitHub Codex re-review required.
+
+## Codex PR #7 — Additional review corrections
+
+- During file opening/password prompts, invalidate old PDF.js/document bytes,
+  annotation state and print session immediately. The new PDF's filename never
+  points at the previous document's content. Pending loads are epoch-checked.
+- Correct Android/mobile QA selectors to use valid CSS attribute syntax.
+- Regression verifies opening A then protected B and confirms Save/Print are
+  disabled while B awaits its password; mobile QA exercises actual signatures.
+- Pinned build metadata includes repository homepage, tested with a clean
+  npm install and actual AppImage/DEB generation plus packaged MIT notices.
+
+Release gate: latest GitHub CI and explicit Codex re-review on the final head.
