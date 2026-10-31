@@ -22,3 +22,40 @@
 - Remaining real-device gates: Windows native install and print, OAuth
   sign-in and AI response, physical Android upgrade and camera,
   published release update. Do not claim these were verified.
+
+
+## Codex PR #6 — Seven P2 regressions (31 Oct 2026)
+
+1. Cancel active AI request on document switch; events are bound to source document.
+2. Limit historical chat to nine completed message pairs plus context and current prompt.
+3. Print password-protected PDFs through a new rasterized temporary PDF generated
+   from PDF.js's already-unlocked content, without altering the source.
+4. Abort print preparation and iframe printing when the document changes.
+5. Preserve original PNG/WebP alpha during signature-background removal.
+6. Keep drawn-signature canvas mounted when switching between photo/draw modes.
+7. Verify Unicode glyph coverage before export; block user save/print on missing
+   text glyphs rather than silently corrupting a document.
+
+Checks: test:ai, test:text, test:mobile, test:encrypted, test:web,
+test:export, typecheck, build and npm audit. GitHub Codex re-review required.
+
+## Codex PR #7 — Additional review corrections
+
+- During file opening/password prompts, invalidate old PDF.js/document bytes,
+  annotation state and print session immediately. The new PDF's filename never
+  points at the previous document's content. Pending loads are epoch-checked.
+- Correct Android/mobile QA selectors to use valid CSS attribute syntax.
+- Regression verifies opening A then protected B and confirms Save/Print are
+  disabled while B awaits its password; mobile QA exercises actual signatures.
+- Pinned build metadata includes repository homepage, tested with a clean
+  npm install and actual AppImage/DEB generation plus packaged MIT notices.
+
+Release gate: latest GitHub CI and explicit Codex re-review on the final head.
+
+- Codex PR #7 follow-up: protected PDF rasterization now uses PDF.js `intent: print` so print-only layers/annotations are respected.
+
+- Codex PR #7 latest review: protect the persisted reading session during a
+  password prompt and until prior page/zoom have been fully restored. The
+  `sessionReady` flag gates delayed IndexedDB writes; QA seeds a real previous
+  session, pauses on the password prompt, asserts no overwrite, and verifies
+  page restoration after unlocking.

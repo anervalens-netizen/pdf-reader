@@ -33,3 +33,12 @@ assert.ok(content.includes('ăâîșț'), 'Diacritics must survive PDF export')
 assert.ok(content.includes('Text pe un document PDF'), 'ASCII text must survive')
 assert.equal((await PDFDocument.load(bytes)).getPageCount(), 1, 'Original remains unmodified')
 console.log('Editable text export ASCII/Unicode: OK', outputSize, 'bytes')
+
+// Unsupported glyphs must never be silently substituted with empty boxes.
+const unsafeText = [{ ...annotations[0], id: 'unsupported', text: 'CJK 汉字 and emoji 😀' }]
+const unsafe = await exportAnnotatedPdf(input, unsafeText, { unicodeFontBytes: font })
+assert.ok(unsafe.warnings.some(w => w.includes('caractere neacoperite')),
+  'Missing-glyph warning is required before exporting unsupported text')
+const unsafePages = await PDFDocument.load(unsafe.data)
+assert.equal(unsafePages.getPageCount(), 1)
+console.log('Unsupported Unicode glyphs explicitly warned: OK')

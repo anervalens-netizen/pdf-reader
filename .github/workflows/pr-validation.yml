@@ -37,6 +37,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:export
       - run: npm run test:edit
+      - run: npm run test:ai
       - run: npm run test:text
       - run: npm run android:sync
       - name: Mobile UI smoke

@@ -36,6 +36,7 @@ jobs:
           npm run test:sw
           npm run test:pages
           npm run test:edit
+          npm run test:ai
           npm run test:text
 
       - name: Build instalator
@@ -81,12 +82,14 @@ jobs:
           npm run test:sw
           npm run test:pages
           npm run test:edit
+          npm run test:ai
           npm run test:text
 
       - name: Test UI Web / documente corupte / nume duplicate
         run: |
           npm run build:web
           xvfb-run -a npx electron --no-sandbox scripts/qa-web.cjs
+          xvfb-run -a npx electron --no-sandbox scripts/qa-encrypted-print.cjs
 
       - name: Build pachete
         run: npm run dist:linux

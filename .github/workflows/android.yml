@@ -43,6 +43,7 @@ jobs:
           npm run test:sw
           npm run test:pages
           npm run test:edit
+          npm run test:ai
           npm run test:text
 
       - name: Build web + sincronizează shell-ul Android

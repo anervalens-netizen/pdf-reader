@@ -13,6 +13,7 @@ import * as db from '../lib/db'
 import { fileToRecord } from '../lib/webApi'
 import { isNativeShell } from '../lib/native'
 import { printPdfBlob } from '../lib/printPdf'
+import { printCopyOfProtectedPdf } from '../lib/printProtectedPdf'
 import { EditHistory } from '../lib/editHistory'
 import { loadDocument, type PDFDocumentProxy } from '../lib/pdf'
 import { buildPageIndex, findMatches } from '../lib/textIndex'
@@ -61,6 +62,7 @@ export interface AppState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   error: string | null
   needsPassword: boolean
+  sessionReady: boolean
   numPages: number
   page: number
   zoom: number
@@ -89,6 +91,7 @@ const initialState: AppState = {
   status: 'idle',
   error: null,
   needsPassword: false,
+  sessionReady: false,
   numPages: 0,
   page: 1,
   zoom: 1,
@@ -113,10 +116,11 @@ const initialState: AppState = {
 
 type Action =
   | { type: 'theme/set'; theme: Theme }
-  | { type: 'file/loading' }
+  | { type: 'file/loading'; file: FileRef }
   | { type: 'file/opened'; file: FileRef; numPages: number; outline: OutlineNode[] | null }
   | { type: 'file/error'; message: string }
   | { type: 'file/needs-password' }
+  | { type: 'session/loaded' }
   | { type: 'file/closed' }
   | { type: 'page/set'; page: number }
   | { type: 'zoom/set'; zoom: number; mode: ZoomMode }
@@ -145,11 +149,18 @@ function reducer(state: AppState, action: Action): AppState {
     case 'theme/set':
       return { ...state, theme: action.theme }
     case 'file/loading':
-      return { ...state, status: 'loading', error: null, needsPassword: false }
+      return {
+        ...state, file: action.file, status: 'loading', error: null,
+        needsPassword: false, sessionReady: false,
+        annotations: [], outline: null,
+        numPages: 0, page: 1, history: { undo: 0, redo: 0 },
+        hits: [], hitIndex: -1, query: '', searchOpen: false
+      }
     case 'file/opened':
       return {
         ...state,
         status: 'ready',
+        sessionReady: false,
         file: action.file,
         numPages: action.numPages,
         outline: action.outline,
@@ -163,12 +174,15 @@ function reducer(state: AppState, action: Action): AppState {
     case 'file/error':
       return { ...state, status: 'error', error: action.message }
     case 'file/needs-password':
-      return { ...state, status: 'error', needsPassword: true }
+      return { ...state, status: 'error', needsPassword: true, sessionReady: false }
+    case 'session/loaded':
+      return { ...state, sessionReady: true }
     case 'file/closed':
       return {
         ...state,
         file: null,
         status: 'idle',
+        sessionReady: false,
         numPages: 0,
         page: 1,
         annotations: [],
@@ -268,6 +282,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const dataRef = useRef<ArrayBuffer | null>(null)
   const searchToken = useRef(0)
   const printInProgress = useRef(false)
+  const printAbortRef = useRef<AbortController | null>(null)
   // Increased before each document load/close, independent of search events.
   const documentEpoch = useRef(0)
   const annotationsRef = useRef<Annotation[]>([])
@@ -336,17 +351,27 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const loadFile = useCallback(
     async (file: { path: string; name: string; size: number; data: ArrayBuffer }, password?: string) => {
-      // Cancel in-flight print preparation and searches before replacing PDF.
-      documentEpoch.current += 1
+      // A pending password prompt must never be paired with the previous PDF.
+      const epoch = ++documentEpoch.current
+      printAbortRef.current?.abort()
       searchToken.current += 1
-      dispatch({ type: 'file/loading' })
+      const previous = docRef.current
+      docRef.current = null
+      dataRef.current = null
+      annotationPathRef.current = null
+      annotationsRef.current = []
+      historyRef.current.reset()
+      if (previous) void previous.cleanup()
+      dispatch({ type: 'file/loading', file: { path: file.path, name: file.name, size: file.size } })
       try {
         // PDF.js transfers its input ArrayBuffer to the worker, detaching it.
         // Keep the original bytes intact for Save Copy and page operations.
         const doc = await loadDocument(file.data.slice(0), { password })
-        const oldDocument = docRef.current
+        if (epoch !== documentEpoch.current) {
+          void doc.cleanup()
+          return
+        }
         docRef.current = doc
-        if (oldDocument && oldDocument !== doc) void oldDocument.cleanup()
         dataRef.current = file.data
 
         let outline: OutlineNode[] | null = null
@@ -370,6 +395,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         const pendingAnnotations = annotationWritesRef.current.get(file.path)
         if (pendingAnnotations) await pendingAnnotations
         const stored = (await db.getAnnotations(file.path)) as Annotation[] | undefined
+        if (epoch !== documentEpoch.current || docRef.current !== doc) return
         annotationPathRef.current = file.path
         historyRef.current.reset()
         dispatch({ type: 'history/set', counts: historyRef.current.counts })
@@ -383,9 +409,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         if (stored?.length) dispatch({ type: 'annotations/set', annotations: stored })
 
         await db.touchRecent({ path: file.path, name: file.name, size: file.size })
+        if (epoch !== documentEpoch.current) return
         await refreshRecents()
 
         const session = await db.getSession(file.path)
+        if (epoch !== documentEpoch.current) return
         if (session) {
           dispatch({ type: 'page/set', page: session.page })
           // Only a custom zoom is restored; fit modes are recomputed for the
@@ -394,7 +422,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             dispatch({ type: 'zoom/set', zoom: session.zoom, mode: 'custom' })
           }
         }
+        dispatch({ type: 'session/loaded' })
       } catch (error) {
+        if (epoch !== documentEpoch.current) return
         const err = error as { name?: string; message?: string }
         if (err?.name === 'PasswordException') {
           dispatch({ type: 'file/needs-password' })
@@ -446,6 +476,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const closeDocument = useCallback(() => {
     documentEpoch.current += 1
+    printAbortRef.current?.abort()
     searchToken.current += 1
     void docRef.current?.cleanup()
     docRef.current = null
@@ -605,7 +636,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     const doc = docRef.current
     const file = state.file
     const data = dataRef.current
-    if (!doc || !file || !data) return
+    if (!doc || !file || !data || state.status !== 'ready') return
 
     dispatch({ type: 'saving/set', saving: true })
     try {
@@ -619,6 +650,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
       const unicodeFontBytes = await fontForFormValues([...formValues, { name: '__pdf_editor_text__', type: 'text', value: annotations.filter((a) => a.type === 'text').map((a) => a.text).join('\\n') }])
       const result = await exportAnnotatedPdf(data, annotations, { formValues, unicodeFontBytes })
+      if (result.warnings.some((warning) => warning.includes('Textul nu a fost exportat'))) {
+        throw new Error('Caseta de text conține caractere care nu se pot exporta. Corectează textul înainte de salvare.')
+      }
       const baseName = file.name.replace(/\.pdf$/i, '')
       const saved = await api.saveFile({
         defaultName: state.annotations.length ? `${baseName}-adnotat.pdf` : file.name,
@@ -652,7 +686,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const pageOperation = useCallback(async (operation: PageOperation, selection = ''): Promise<boolean> => {
     const file = state.file
     const source = dataRef.current
-    if (!file || !source || state.saving) return false
+    if (!file || !source || state.saving || state.status !== 'ready') return false
     const epoch = documentEpoch.current
     dispatch({ type: 'saving/set', saving: true })
     try {
@@ -667,6 +701,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const annotations = annotationPathRef.current === file.path ? annotationsRef.current : state.annotations
       const unicodeFontBytes = await fontForFormValues([...values, { name: '__pdf_editor_text__', type: 'text', value: annotations.filter((a) => a.type === 'text').map((a) => a.text).join('\\n') }])
       const prepared = await exportAnnotatedPdf(source, annotations, { formValues: values, unicodeFontBytes })
+      if (prepared.warnings.some((warning) => warning.includes('Textul nu a fost exportat'))) {
+        throw new Error('Operația a fost oprită: caseta de text conține caractere incompatibile.')
+      }
       const base = file.name.replace(/\.pdf$/i, '')
       const save = async (data: ArrayBuffer, name: string): Promise<boolean> => {
         const saved = await api.saveFile({ defaultName: name, data, title: 'Salvează un PDF nou' })
@@ -725,8 +762,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   }, [state.file, state.page, state.numPages, state.annotations, state.saving, collectFormValues, refreshRecents, toast])
 
   const print = useCallback(() => {
-    if (printInProgress.current || !state.file || !docRef.current) return
-    // Android WebView lacks a reliable inline PDF print viewer.
+    const doc = docRef.current
+    const file = state.file
+    if (printInProgress.current || !doc || !file || state.status !== 'ready') return
     if (isNativeShell()) {
       toast('Pe Android, salvează o copie și imprim-o din aplicația sistemului.', 'info')
       return
@@ -734,22 +772,53 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     const epoch = documentEpoch.current
     const source = dataRef.current
     if (!source) return
+    const controller = new AbortController()
+    printAbortRef.current = controller
+    const ensureCurrent = (): void => {
+      if (controller.signal.aborted || epoch !== documentEpoch.current || docRef.current !== doc) {
+        throw new Error('Documentul s-a schimbat în timpul pregătirii imprimării.')
+      }
+    }
     printInProgress.current = true
     dispatch({ type: 'printing/set', printing: true })
     void (async () => {
-      const pending = annotationWritesRef.current.get(state.file!.path)
+      const pending = annotationWritesRef.current.get(file.path)
       if (pending) await pending
+      ensureCurrent()
       const values = await collectFormValues()
-      if (epoch !== documentEpoch.current) throw new Error('Documentul s-a schimbat în timpul pregătirii.')
-      const annotations = annotationsRef.current
-      const unicodeFontBytes = await fontForFormValues([...values, { name: '__pdf_editor_text__', type: 'text', value: annotations.filter((a) => a.type === 'text').map((a) => a.text).join('\\n') }])
-      const result = await exportAnnotatedPdf(source, annotations, { formValues: values, unicodeFontBytes })
-      if (result.warnings.length) toast('PDF conține avertizări. Verifică semnăturile digitale și formularele.', 'info')
-      await printPdfBlob(result.data)
+      ensureCurrent()
+      const annotations = [...annotationsRef.current]
+      const unicodeFontBytes = await fontForFormValues([...values, {
+        name: '__pdf_editor_text__', type: 'text',
+        value: annotations.filter((a) => a.type === 'text').map((a) => a.text).join('\n')
+      }])
+      ensureCurrent()
+      let output: ArrayBuffer
+      try {
+        const exported = await exportAnnotatedPdf(source, annotations, { formValues: values, unicodeFontBytes })
+        ensureCurrent()
+        if (exported.warnings.some((warning) => warning.includes('Textul nu a fost exportat'))) {
+          throw new Error('Imprimarea a fost oprită: caseta de text conține caractere neacceptate.')
+        }
+        if (exported.warnings.length) toast('Imprimare: ' + exported.warnings[0], 'error')
+        output = exported.data
+      } catch (error) {
+        ensureCurrent()
+        // pdf-lib cannot decrypt PDF files. PDF.js has already decrypted the
+        // opened document with the user's password: render a new print copy.
+        if (!/encrypted/i.test(String(error))) throw error
+        toast('PDF protejat: imprimare rasterizată la 144 dpi. Originalul rămâne intact.', 'info')
+        output = await printCopyOfProtectedPdf(doc, annotations, controller.signal)
+        ensureCurrent()
+      }
+      ensureCurrent()
+      await printPdfBlob(output, controller.signal)
     })().catch((error) => {
-      console.error('[print] vector PDF print failed', error)
+      if (controller.signal.aborted) return
+      console.error('[print] PDF print failed', error)
       toast('Imprimarea nu a reușit: ' + String(error) + '. Poți salva o copie PDF.', 'error')
     }).finally(() => {
+      if (printAbortRef.current === controller) printAbortRef.current = null
       printInProgress.current = false
       dispatch({ type: 'printing/set', printing: false })
     })
@@ -758,7 +827,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   // Persist the reading session (page + zoom) for the next launch.
   useEffect(() => {
     const file = state.file
-    if (!file) return
+    // Never overwrite a saved session while a password prompt is shown or
+    // before its original page/zoom have been restored from IndexedDB.
+    if (!file || state.status !== 'ready' || !state.sessionReady) return
     const timer = window.setTimeout(() => {
       void db.saveSession({
         path: file.path,
@@ -770,7 +841,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       })
     }, 800)
     return () => window.clearTimeout(timer)
-  }, [state.file, state.page, state.zoom, state.zoomMode])
+  }, [state.file, state.page, state.zoom, state.zoomMode, state.status, state.sessionReady])
 
   const value = useMemo<AppContextValue>(
     () => ({

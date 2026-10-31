@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import { useApp } from '../state/store'
 import type { PdfAiApi, AiResponseEvent, AiStatus } from '../../../shared/api'
 import { Icon } from './Icon'
+import { selectAiHistory, aiEventMatchesDocument } from '../lib/aiHistory'
 
 declare global {
   interface Window { pdfAi?: PdfAiApi }
@@ -9,7 +10,6 @@ declare global {
 
 type Message = { role: 'user' | 'assistant'; content: string }
 const MAX_DOCUMENT_CHARS = 140_000
-const MAX_CHAT_HISTORY_CHARS = 38_000
 
 // In-memory, per-document chat cache. Never upload or save automatically.
 const sessionChats = new Map<string, Message[]>()
@@ -59,12 +59,24 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
   const activeId = useRef<string | null>(null)
   const busyRef = useRef(false)
   const documentKeyRef = useRef(documentKey)
+  const activeDocumentKeyRef = useRef<string | null>(null)
+  // Set synchronously during render, before a queued stream delta can run.
+  documentKeyRef.current = documentKey
 
   useEffect(() => {
-    documentKeyRef.current = documentKey
+    const id = activeId.current
+    if (id) {
+      // Invalidate before cancelling: late events can no longer update the next PDF.
+      activeId.current = null
+      activeDocumentKeyRef.current = null
+      busyRef.current = false
+      setBusy(false)
+      void ai?.cancel(id).catch(() => {})
+    }
     setMessages(sessionChats.get(documentKey) ?? [])
+    setQuestion('')
     setError('')
-  }, [documentKey])
+  }, [ai, documentKey])
 
   useEffect(() => {
     if (!ai) return
@@ -90,19 +102,22 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
   useEffect(() => {
     if (!ai) return
     const listener = (event: AiResponseEvent): void => {
-      if (event.id !== activeId.current) return
+      const requestKey = activeDocumentKeyRef.current
+      if (!aiEventMatchesDocument(event.id, activeId.current,
+          requestKey, documentKeyRef.current)) return
       if (event.type === 'delta') {
         setMessages((prior) => {
-          if (prior.length === 0) return prior
+          if (!prior.length || documentKeyRef.current !== requestKey) return prior
           const next = [...prior]
           const last = next[next.length - 1]
           if (last.role === 'assistant') next[next.length - 1] = { ...last, content: last.content + (event.text ?? '') }
-          sessionChats.set(documentKeyRef.current, next)
+          sessionChats.set(requestKey, next)
           return next
         })
       } else {
         if (event.type === 'error') setError(event.message ?? 'Răspunsul AI a eșuat.')
         activeId.current = null
+        activeDocumentKeyRef.current = null
         busyRef.current = false
         setBusy(false)
       }
@@ -113,6 +128,7 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
       const id = activeId.current
       if (id) void ai.cancel(id).catch(() => {})
       activeId.current = null
+      activeDocumentKeyRef.current = null
     }
   }, [ai])
 
@@ -130,7 +146,7 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
 
   const send = useCallback(async () => {
     const doc = docRef.current
-    const text = question.trim()
+    const text = question.trim().slice(0, 4000)
     if (!ai || !doc || !state.file || !text || !model || busyRef.current) return
     setError('')
     setQuestion('')
@@ -138,6 +154,7 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
     setBusy(true)
     const id = crypto.randomUUID()
     activeId.current = id
+    activeDocumentKeyRef.current = documentKey
     const prior = messages
     const next: Message[] = [...prior, { role: 'user', content: text }, { role: 'assistant', content: '' }]
     setMessages(next)
@@ -145,13 +162,7 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
     try {
       const documentContent = await documentText(doc, state.file.name)
       if (docRef.current !== doc || state.file.path !== documentKey) throw new Error('Documentul s-a schimbat.')
-      const previous: Message[] = []
-      let historyLength = 0
-      for (let i = prior.length - 1; i >= 0; i--) {
-        if (!prior[i].content || historyLength + prior[i].content.length > MAX_CHAT_HISTORY_CHARS) break
-        previous.unshift(prior[i])
-        historyLength += prior[i].content.length
-      }
+      const previous = selectAiHistory(prior)
       const request = {
         id, model,
         instructions: 'Răspunde în limba română, exclusiv pe baza textului furnizat. Pentru informații din document citează exact pagina folosind [p. N]. Dacă documentul nu conține răspunsul, spune clar. Nu inventa citări.',
@@ -162,6 +173,7 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
     } catch (err) {
       if (activeId.current !== id) return
       activeId.current = null
+      activeDocumentKeyRef.current = null
       busyRef.current = false
       setBusy(false)
       setError(String(err))
@@ -225,7 +237,7 @@ export function AiPanel({ onClose }: { onClose: () => void }): JSX.Element {
           </div>
           <div className="ai-panel__compose">
             <textarea aria-label="Întrebare pentru ChatGPT" placeholder="Întreabă despre document…" rows={3}
-              value={question} onChange={(event) => setQuestion(event.target.value)}
+              value={question} maxLength={4000} onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send() }
               }} />
