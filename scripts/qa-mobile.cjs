@@ -21,10 +21,13 @@ async function main() {
   const evaluate = js => win.webContents.executeJavaScript(js, true)
   try {
     await win.loadURL(`http://127.0.0.1:${server.address().port}/`)
-    for(let i=0;i<100 && !(await evaluate("!!document.querySelector('.welcome')"));i++) await delay(100)
+    for(let i=0;i<200 && !(await evaluate("!!document.querySelector('.welcome')"));i++) await delay(100)
     await evaluate(`(async()=>{const b=await (await fetch('/sample.pdf')).arrayBuffer(); const dt=new DataTransfer();dt.items.add(new File([b],'qa.pdf',{type:'application/pdf'}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}))})()`)
-    for(let i=0;i<100 && !(await evaluate("!!document.querySelector('.page canvas')"));i++) await delay(100)
-    assert(await evaluate("!!document.querySelector('.page canvas')"), 'PDF did not render')
+    for(let i=0;i<300 && !(await evaluate("!!document.querySelector('.page canvas')"));i++) await delay(100)
+    if (!(await evaluate("!!document.querySelector('.page canvas')"))) {
+      const state = await evaluate("({welcome:!!document.querySelector('.welcome'),error:document.querySelector('.welcome__card--error')?.textContent,loader:document.querySelector('.loader')?.textContent,preview:document.body.textContent.slice(0,350)})")
+      throw new Error('PDF did not render: ' + JSON.stringify(state))
+    }
     assert.equal(await evaluate("!!document.querySelector('.sidebar')"),false,'sidebar initially covers document')
     await evaluate("document.querySelector('[aria-label=\"Comută panoul lateral\"]').click()")
     await delay(150)

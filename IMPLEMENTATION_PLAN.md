@@ -51,3 +51,5 @@ test:export, typecheck, build and npm audit. GitHub Codex re-review required.
   npm install and actual AppImage/DEB generation plus packaged MIT notices.
 
 Release gate: latest GitHub CI and explicit Codex re-review on the final head.
+
+- Codex PR #7 follow-up: protected PDF rasterization now uses PDF.js `intent: print` so print-only layers/annotations are respected.

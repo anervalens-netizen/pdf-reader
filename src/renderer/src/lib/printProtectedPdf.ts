@@ -116,6 +116,8 @@ export async function printCopyOfProtectedPdf(
       ctx.fillRect(0,0,canvas.width,canvas.height)
       await page.render({
         canvas, canvasContext: ctx, viewport,
+        // Print-specific OCG/annotation visibility differs from on-screen view.
+        intent: 'print',
         annotationMode: AnnotationMode.ENABLE_STORAGE
       }).promise
       assertCurrent(signal)
