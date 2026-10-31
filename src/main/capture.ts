@@ -60,7 +60,7 @@ export async function runCaptureSequence(
       [...menu.querySelectorAll('.app-menu__item')].find(b => b.textContent?.trim() === 'Despre PDF')?.click();
       await new Promise(resolve => setTimeout(resolve, 250));
       const about = !!document.querySelector('[aria-label="Despre PDF"]');
-      const version = document.querySelector('.app-menu__modal')?.textContent?.includes('1.2.1');
+      const version = document.querySelector('.app-menu__modal')?.textContent?.includes(${JSON.stringify(app.getVersion())});
       document.querySelector('.app-menu__modal .btn--primary')?.click();
       return {fileOpen, preferences, about, version};
     })()`, true)
