@@ -53,3 +53,9 @@ test:export, typecheck, build and npm audit. GitHub Codex re-review required.
 Release gate: latest GitHub CI and explicit Codex re-review on the final head.
 
 - Codex PR #7 follow-up: protected PDF rasterization now uses PDF.js `intent: print` so print-only layers/annotations are respected.
+
+- Codex PR #7 latest review: protect the persisted reading session during a
+  password prompt and until prior page/zoom have been fully restored. The
+  `sessionReady` flag gates delayed IndexedDB writes; QA seeds a real previous
+  session, pauses on the password prompt, asserts no overwrite, and verifies
+  page restoration after unlocking.

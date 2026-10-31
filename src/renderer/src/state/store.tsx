@@ -62,6 +62,7 @@ export interface AppState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   error: string | null
   needsPassword: boolean
+  sessionReady: boolean
   numPages: number
   page: number
   zoom: number
@@ -90,6 +91,7 @@ const initialState: AppState = {
   status: 'idle',
   error: null,
   needsPassword: false,
+  sessionReady: false,
   numPages: 0,
   page: 1,
   zoom: 1,
@@ -118,6 +120,7 @@ type Action =
   | { type: 'file/opened'; file: FileRef; numPages: number; outline: OutlineNode[] | null }
   | { type: 'file/error'; message: string }
   | { type: 'file/needs-password' }
+  | { type: 'session/loaded' }
   | { type: 'file/closed' }
   | { type: 'page/set'; page: number }
   | { type: 'zoom/set'; zoom: number; mode: ZoomMode }
@@ -148,7 +151,8 @@ function reducer(state: AppState, action: Action): AppState {
     case 'file/loading':
       return {
         ...state, file: action.file, status: 'loading', error: null,
-        needsPassword: false, annotations: [], outline: null,
+        needsPassword: false, sessionReady: false,
+        annotations: [], outline: null,
         numPages: 0, page: 1, history: { undo: 0, redo: 0 },
         hits: [], hitIndex: -1, query: '', searchOpen: false
       }
@@ -156,6 +160,7 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         status: 'ready',
+        sessionReady: false,
         file: action.file,
         numPages: action.numPages,
         outline: action.outline,
@@ -169,12 +174,15 @@ function reducer(state: AppState, action: Action): AppState {
     case 'file/error':
       return { ...state, status: 'error', error: action.message }
     case 'file/needs-password':
-      return { ...state, status: 'error', needsPassword: true }
+      return { ...state, status: 'error', needsPassword: true, sessionReady: false }
+    case 'session/loaded':
+      return { ...state, sessionReady: true }
     case 'file/closed':
       return {
         ...state,
         file: null,
         status: 'idle',
+        sessionReady: false,
         numPages: 0,
         page: 1,
         annotations: [],
@@ -414,6 +422,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             dispatch({ type: 'zoom/set', zoom: session.zoom, mode: 'custom' })
           }
         }
+        dispatch({ type: 'session/loaded' })
       } catch (error) {
         if (epoch !== documentEpoch.current) return
         const err = error as { name?: string; message?: string }
@@ -818,7 +827,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   // Persist the reading session (page + zoom) for the next launch.
   useEffect(() => {
     const file = state.file
-    if (!file) return
+    // Never overwrite a saved session while a password prompt is shown or
+    // before its original page/zoom have been restored from IndexedDB.
+    if (!file || state.status !== 'ready' || !state.sessionReady) return
     const timer = window.setTimeout(() => {
       void db.saveSession({
         path: file.path,
@@ -830,7 +841,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       })
     }, 800)
     return () => window.clearTimeout(timer)
-  }, [state.file, state.page, state.zoom, state.zoomMode])
+  }, [state.file, state.page, state.zoom, state.zoomMode, state.status, state.sessionReady])
 
   const value = useMemo<AppContextValue>(
     () => ({

@@ -32,11 +32,22 @@ async function run(){
     const open="(async()=>{const b=await(await fetch('/protected.pdf')).arrayBuffer();const tr=new DataTransfer();tr.items.add(new File([b],'protected.pdf',{type:'application/pdf'}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:tr,bubbles:true,cancelable:true}))})()"
     await js(open)
     await until("Boolean(document.querySelector('input[aria-label=\"Parola documentului\"]'))")
+    // A protected PDF previously read on page 2 must not lose its session
+    // while the password prompt is displayed for over one second.
+    const encryptedKey = await js("document.querySelector('.titlebar__subtitle')?.textContent")
+    assert.ok(encryptedKey && encryptedKey.startsWith('web:sha256:'), 'No pending encrypted document key')
+    await js("(async()=>{const key="+JSON.stringify(encryptedKey)+";const db=await new Promise((ok,fail)=>{const r=indexedDB.open('pdf');r.onsuccess=()=>ok(r.result);r.onerror=()=>fail(r.error)});await new Promise((ok,fail)=>{const tx=db.transaction('sessions','readwrite');tx.objectStore('sessions').put({path:key,page:2,zoom:1.25,zoomMode:'custom',scrollTop:0,updatedAt:1234});tx.oncomplete=ok;tx.onerror=()=>fail(tx.error)});db.close()})()")
+    await pause(1400)
+    const preserved = await js("(async()=>{const key="+JSON.stringify(encryptedKey)+";const db=await new Promise((ok,fail)=>{const r=indexedDB.open('pdf');r.onsuccess=()=>ok(r.result);r.onerror=()=>fail(r.error)});const row=await new Promise((ok,fail)=>{const r=db.transaction('sessions','readonly').objectStore('sessions').get(key);r.onsuccess=()=>ok(r.result);r.onerror=()=>fail(r.error)});db.close();return row?.page===2&&row?.zoom===1.25&&row?.updatedAt===1234})()")
+    assert.ok(preserved,'Password prompt overwrote previous page and zoom')
+    console.log('OK: prior reading session untouched during password prompt')
     const unlock="(()=>{const n=document.querySelector('input[aria-label=\"Parola documentului\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(n,'test-qa');n.dispatchEvent(new Event('input',{bubbles:true}))})()"
     await js(unlock);await pause(100)
     await js("document.querySelector('.password-prompt button').click()")
     await until("Boolean(document.querySelector('.page__canvas'))")
+    await until("document.querySelector('.page-indicator__input')?.value === '2'")
     assert.equal((await js("document.querySelector('.page-indicator__total')?.textContent")).trim(),'/ 3')
+    console.log('OK: prior reading position restored after password unlock')
     await js("document.querySelector('button[aria-label=\"Tipărește\"]').click()")
     const printData=await until("(async()=>{const f=document.querySelector('iframe[aria-hidden=true][src^=\"blob:\"]');if(!f)return null;return [...new Uint8Array(await(await fetch(f.src)).arrayBuffer())]})()")
     const doc=await PDFDocument.load(Uint8Array.from(printData))
