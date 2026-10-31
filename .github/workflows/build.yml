@@ -91,6 +91,11 @@ jobs:
           xvfb-run -a npx electron --no-sandbox scripts/qa-web.cjs
           xvfb-run -a npx electron --no-sandbox scripts/qa-encrypted-print.cjs
 
+      - name: Regression UI desktop - update preference freshness
+        run: |
+          npm run build
+          xvfb-run -a npx electron --no-sandbox scripts/qa-desktop-preferences.cjs
+
       - name: Build pachete
         run: npm run dist:linux
         env:

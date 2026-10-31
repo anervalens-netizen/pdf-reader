@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { useApp, type Tool } from '../state/store'
 import { api, isDesktop } from '../lib/api'
 import type { AppInfo } from '../../../shared/api'
@@ -40,8 +40,9 @@ const entries: Record<Section, { label: string; action: Action; needsFile?: bool
   help: [{ label: 'Despre PDF', action: 'about' }]
 }
 
-export function AppMenu({ variant, onSignature, onPages, onAi }: {
+export function AppMenu({ variant, onRegisterBack, onSignature, onPages, onAi }: {
   variant: 'desktop' | 'mobile'
+  onRegisterBack: (handler: (() => boolean) | null) => void
   onSignature: () => void
   onPages: () => void
   onAi: () => void
@@ -59,19 +60,30 @@ export function AppMenu({ variant, onSignature, onPages, onAi }: {
     const close = (event: MouseEvent): void => {
       if (!root.current?.contains(event.target as Node)) setActive(null)
     }
-    const escape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setActive(null)
-    }
     document.addEventListener('mousedown', close)
-    document.addEventListener('keydown', escape)
-    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) }
+    return () => { document.removeEventListener('mousedown', close) }
   }, [active])
+
+  // Keep Back handling in sync with the topmost layer before the UI is painted.
+  useLayoutEffect(() => {
+    onRegisterBack(() => {
+      if (dialog) { setDialog(null); return true }
+      if (active) { setActive(null); return true }
+      return false
+    })
+    return () => onRegisterBack(null)
+  }, [active, dialog, onRegisterBack])
+
+  const showPreferences = (): void => {
+    setAutoUpdate(localStorage.getItem('pdf.autoUpdateCheck') === 'true')
+    setDialog('preferences')
+  }
 
   useEffect(() => {
     if (variant !== 'desktop') return
     return api.onMenuAction((action) => {
       if (action === 'recent') setActive('file')
-      if (action === 'settings') setDialog('preferences')
+      if (action === 'settings') showPreferences()
       if (action === 'about') setDialog('about')
     })
   }, [variant])
@@ -102,7 +114,7 @@ export function AppMenu({ variant, onSignature, onPages, onAi }: {
       case 'signature': onSignature(); break
       case 'pages': onPages(); break
       case 'ai': onAi(); break
-      case 'preferences': setDialog('preferences'); break
+      case 'preferences': showPreferences(); break
       case 'about': setDialog('about'); break
     }
   }
