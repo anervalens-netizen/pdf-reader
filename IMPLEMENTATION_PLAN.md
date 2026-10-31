@@ -22,3 +22,19 @@
 - Remaining real-device gates: Windows native install and print, OAuth
   sign-in and AI response, physical Android upgrade and camera,
   published release update. Do not claim these were verified.
+
+
+## Codex PR #6 — Seven P2 regressions (31 Oct 2026)
+
+1. Cancel active AI request on document switch; events are bound to source document.
+2. Limit historical chat to nine completed message pairs plus context and current prompt.
+3. Print password-protected PDFs through a new rasterized temporary PDF generated
+   from PDF.js's already-unlocked content, without altering the source.
+4. Abort print preparation and iframe printing when the document changes.
+5. Preserve original PNG/WebP alpha during signature-background removal.
+6. Keep drawn-signature canvas mounted when switching between photo/draw modes.
+7. Verify Unicode glyph coverage before export; block user save/print on missing
+   text glyphs rather than silently corrupting a document.
+
+Checks: test:ai, test:text, test:mobile, test:encrypted, test:web,
+test:export, typecheck, build and npm audit. GitHub Codex re-review required.

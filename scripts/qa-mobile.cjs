@@ -67,6 +67,38 @@ async function main() {
     const page2=await evaluate("document.querySelector('.page-indicator__input').value")
     assert.equal(page1,'4','selected page not active')
     assert.equal(page2,page1,'page changed without user interaction')
+    // Codex regression: swapping to photo and back must retain drawn ink.
+    await evaluate("document.querySelector('button[aria-label=\\\"Semnătură\\\"]')?.click()")
+    await delay(120)
+    const position = await evaluate("(() => {const r=document.querySelector('.signature-canvas').getBoundingClientRect();return {x:Math.round(r.left+35),y:Math.round(r.top+40)}})()")
+    win.webContents.sendInputEvent({type:'mouseDown',x:position.x,y:position.y,button:'left',clickCount:1})
+    win.webContents.sendInputEvent({type:'mouseMove',x:position.x+58,y:position.y+10})
+    win.webContents.sendInputEvent({type:'mouseUp',x:position.x+58,y:position.y+10,button:'left'})
+    await delay(180)
+    const savedInk = await evaluate("document.querySelector('.signature-canvas').toDataURL()")
+    const switchToPhoto = "(()=>{const b=[...document.querySelectorAll('button')].find(n=>n.textContent?.trim()==='Din fotografie');const f=document.querySelector('input[accept=\\\"image/png,image/jpeg,image/webp\\\"]');f.click=()=>{};b.click();return !!document.querySelector('.signature-photo')})()"
+    await evaluate(switchToPhoto)
+    await delay(130)
+    assert(await evaluate("Boolean(document.querySelector('.signature-photo'))"),'photo tab did not open')
+    await evaluate("[...document.querySelectorAll('button')].find(n=>n.textContent?.trim()==='Desenează').click()")
+    const restoredInk = await evaluate("document.querySelector('.signature-canvas').toDataURL()")
+    assert.equal(restoredInk,savedInk,'drawn signature was destroyed on mode switch')
+    assert.equal(await evaluate("!!document.querySelector('[aria-label=\\\"Semnătură\\\"] .btn--primary')"),true)
+    console.log('OK — signature drawing preserved across mode switch')
+
+    // Transparent PNG regression: source alpha=0 must stay transparent.
+    await evaluate(switchToPhoto)
+    await evaluate("(async()=>{const c=document.createElement('canvas');c.width=100;c.height=75;const g=c.getContext('2d');g.fillStyle='#111';g.fillRect(30,30,40,5);const blob=await new Promise(r=>c.toBlob(r,'image/png'));const input=document.querySelector('input[accept=\\\"image/png,image/jpeg,image/webp\\\"]');Object.defineProperty(input,'files',{value:[new File([blob],'transparent.png',{type:'image/png'})],configurable:true});input.dispatchEvent(new Event('change',{bubbles:true}))})()")
+    for(let i=0;i<45;i++) {
+      if(await evaluate("Boolean(document.querySelector('.signature-photo__preview'))")) break
+      await delay(120)
+    }
+    assert(await evaluate("Boolean(document.querySelector('.signature-photo__preview'))"),'Signature photo preview missing')
+    const alpha = await evaluate("(async()=>{const i=document.querySelector('.signature-photo__preview');await i.decode();const c=document.createElement('canvas');c.width=i.naturalWidth;c.height=i.naturalHeight;const g=c.getContext('2d');g.drawImage(i,0,0);return {corner:g.getImageData(0,0,1,1).data[3],center:g.getImageData(Math.floor(c.width/2),Math.floor(c.height/2),1,1).data[3]}})()")
+    assert.equal(alpha.corner,0,'Transparent image background became opaque')
+    assert.ok(alpha.center>160,'Signature ink disappeared during cleanup')
+    console.log('OK — transparent signature PNG keeps transparent background')
+
     console.log('OK — mobile sidebar close/backdrop/page selection, zoom and stable page')
   } finally { win.destroy(); server.close() }
 }

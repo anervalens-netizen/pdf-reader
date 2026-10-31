@@ -24,15 +24,15 @@ de la debug la release nu este posibilă fără migrarea datelor aplicației.
 
 ## Versiunea 1.2.0 — editor extins
 
-- Imprimare vectorială a copiei PDF, independentă de zoom și fără limita de 35 de pagini; verificată automat cu documente de 12 și 140 de pagini. Pe Android, salvează o copie și imprimă din aplicația de sistem.
+- Imprimare vectorială a copiei PDF, independentă de zoom și fără limita de 35 de pagini; verificată automat cu documente de 12 și 140 de pagini. Pentru PDF-uri parolate, aplicația poate produce o copie rasterizată temporară pentru tipărire, fără să modifice originalul. Pe Android, salvează o copie și imprimă din aplicația de sistem.
 - Undo/Redo pentru adnotări (60 de operații, doar sesiunea documentului).
-- Casete de text editabile și export în PDF, inclusiv diacritice românești.
+- Casete de text editabile și export în PDF, inclusiv diacritice românești. Salvarea este blocată dacă fontul nu poate reprezenta toate caracterele, pentru a evita pierderea lor.
 - Semnătură din fotografie sau cameră; fundal eliminat local. Nu este semnătură digitală certificată.
 - ChatGPT opțional pe desktop: autentificare OAuth, model disponibil în cont, întrebări despre text cu referințe la pagini. Textul este transmis către OpenAI numai la întrebarea utilizatorului, maximum 140.000 de caractere. Conversațiile sunt păstrate numai în memoria aplicației. Nu există OCR pentru scanări.
 - Electron IPC cu autorizare verificată, restricții asupra fișierelor locale și tokenuri ChatGPT criptate de sistemul de operare, dacă este disponibil un seif de credențiale.
 - Actualizări: verificare la pornire numai cu acord, descărcare explicită pentru Windows instalat și Linux AppImage. Android și Linux deb: instalare manuală.
 
-Limitări de verificare: autentificarea reală ChatGPT, imprimanta fizică, instalatorul Windows și actualizarea unui release real necesită validare suplimentară.
+Limitări de verificare: autentificarea reală ChatGPT, imprimanta fizică, instalatorul Windows și actualizarea unui release real necesită validare suplimentară. Cele șapte findings P2 din Codex Review PR #6 au remedieri și regresii dedicate pe branch-ul de fix.
 
 ---
 

@@ -171,14 +171,13 @@ export function SignatureDialog({ open, onCancel, onConfirm }: SignatureDialogPr
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden
             aria-label="Fotografiază semnătura"
             onChange={(event) => { setPhotoFile(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} />
-          {mode === 'draw' ? (
-            <>
-              <p className="modal__hint">Semnează cu mouse-ul, stylus-ul sau degetul.</p>
-              <canvas ref={canvasRef} className="signature-canvas" width={640} height={220}
-                onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} />
-            </>
-          ) : (
+          <div style={{ display: mode === 'draw' ? 'block' : 'none' }}>
+            <p className="modal__hint">Semnează cu mouse-ul, stylus-ul sau degetul.</p>
+            <canvas ref={canvasRef} className="signature-canvas" width={640} height={220}
+              onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} />
+          </div>
+          {mode === 'photo' && (
             <div className="signature-photo">
               <p className="modal__hint">Semnează pe hârtie albă și fotografiază sau importă imaginea. Fundalul se elimină local.</p>
               <div className="signature-choices">

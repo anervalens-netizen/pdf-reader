@@ -30,7 +30,8 @@ export async function cleanSignaturePhoto(file: File, threshold: number): Promis
       for (let x = 0; x < canvas.width; x++) {
         const i = (y * canvas.width + x) * 4
         const lum = pixels.data[i] * 0.2126 + pixels.data[i+1] * 0.7152 + pixels.data[i+2] * 0.0722
-        const alpha = Math.max(0, Math.min(255, (safeThreshold - lum) * 5))
+        const sourceAlpha = pixels.data[i + 3] / 255
+        const alpha = Math.max(0, Math.min(255, (safeThreshold - lum) * 5)) * sourceAlpha
         pixels.data[i] = 30
         pixels.data[i + 1] = 31
         pixels.data[i + 2] = 33

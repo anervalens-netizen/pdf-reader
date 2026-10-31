@@ -10,6 +10,15 @@ files:
   - out/**/*
   - package.json
 
+# Include third-party MIT notice in installed distributions, not just in GitHub.
+extraResources:
+  - from: LICENSE
+    to: LICENSE
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+  - from: licenses/Folio-MIT.txt
+    to: licenses/Folio-MIT.txt
+
 asar: true
 electronDownload:
   cache: .electron-cache

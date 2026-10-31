@@ -238,6 +238,17 @@ export async function exportAnnotatedPdf(
             warnings.push('Caseta de text Unicode nu poate fi exportată: lipsește fontul.')
             break
           }
+          if (needsUnicode) {
+            const provided = options.unicodeFontBytes!
+            const parsed = fontkit.create(provided)
+            const missing = [...text].filter((char) => !['\n', '\r', '\t'].includes(char))
+              .filter((char) => !parsed.hasGlyphForCodePoint(char.codePointAt(0)!))
+            if (missing.length) {
+              warnings.push('Caseta de text conține caractere neacoperite de font (' +
+                [...new Set(missing)].join(' ') + '). Textul nu a fost exportat; modifică textul înainte de distribuirea copiei.')
+              break
+            }
+          }
           const font = needsUnicode
             ? (pdfDoc.registerFontkit(fontkit), await pdfDoc.embedFont(options.unicodeFontBytes!, { subset: true }))
             : await pdfDoc.embedFont(StandardFonts.Helvetica)
