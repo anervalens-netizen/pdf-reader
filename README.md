@@ -9,7 +9,7 @@ Un singur renderer (React + PDF.js) este folosit pe următoarele ținte:
 
 | Țintă | Formă | Status |
 | --- | --- | --- |
-| **Windows** | instalator NSIS (`PDF-Setup-1.2.0.exe`) | distribuit; testarea instalării native este în curs |
+| **Windows** | instalator NSIS (`PDF-Setup-1.2.0.exe`) | CI Windows verificat; instalarea nativă este de confirmat |
 | **Linux** | AppImage + `deb` | pachetul `deb` 1.1.1 instalat și testat pe Dell |
 | **Android** | APK semnat (Capacitor) + PWA instalabilă | APK 1.1.1 instalat și testat pe OnePlus 6T |
 | **Web** | PWA instalabilă, funcționează offline | gata |
@@ -32,7 +32,7 @@ de la debug la release nu este posibilă fără migrarea datelor aplicației.
 - Electron IPC cu autorizare verificată, restricții asupra fișierelor locale și tokenuri ChatGPT criptate de sistemul de operare, dacă este disponibil un seif de credențiale.
 - Actualizări: verificare la pornire numai cu acord, descărcare explicită pentru Windows instalat și Linux AppImage. Android și Linux deb: instalare manuală.
 
-Limitări de verificare: autentificarea reală ChatGPT, imprimanta fizică, instalatorul Windows și actualizarea unui release real necesită validare suplimentară. Cele șapte findings P2 din Codex Review PR #6 au remedieri și regresii dedicate pe branch-ul de fix.
+Limitări de verificare: autentificarea reală ChatGPT, imprimanta fizică, instalatorul Windows și actualizarea unui release real necesită validare suplimentară. Cele șapte findings P2 din Codex Review PR #6 au remedieri și regresii dedicate în PR #7.
 
 ---
 
@@ -205,13 +205,14 @@ La versiunea 1.0.3, aspectul Unicode al formularelor rămânea o limitare; versi
 
 ## Limitări cunoscute
 
-- **Tipărirea** folosește pipeline-ul de print al browserului: foaia de stil de print ascunde
-  interfața și pune câte o pagină pe foaie. Rezoluția urmează zoomul curent, nu o rezoluție
-  de tipărire dedicată. Imprimarea folosește PDF-ul vectorial și nu are limita de 35 de pagini.
+- **Tipărirea** folosește copia PDF vectorială (independentă de zoom și fără limită de
+  35 de pagini). Documentele protejate cu parolă folosesc o copie rasterizată temporară
+  la maximum 144 dpi, independent de zoom, fără a modifica documentul original.
 - **Adnotările exportate** sunt desenate ca conținut de pagină (aspect vizual identic), nu ca
   obiecte de adnotare PDF interactive.
-- **Actualizările** sunt cablate, dar inactive până când `PDF_UPDATE_FEED` indică un
-  furnizor de release-uri. În repo sunt deja configurate release-urile GitHub.
+- **Actualizările** sunt configurate pentru GitHub Releases: verificare manuală sau la
+  pornire numai cu acord, descărcare explicită pentru Windows instalat și AppImage;
+  pachetele Linux `.deb` și Android se actualizează manual.
 - **Formularele** se completează interactiv (PDF.js), iar valorile sunt exportate în copia
   rezultată pe câmpurile care pot fi scrise.
 - **Android**: pe OnePlus 6T cu Android 11 au fost verificate instalarea release, deschiderea unui PDF prin `ACTION_VIEW`, documentele recente și salvarea prin SAF. Alegerea din managerul de fișiere nu a fost verificată separat; importul extern este limitat la 32 MB.

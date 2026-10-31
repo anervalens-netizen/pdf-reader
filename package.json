@@ -60,5 +60,10 @@
   },
   "overrides": {
     "uuid": "^11.1.1"
+  },
+  "homepage": "https://github.com/anervalens-netizen/pdf-reader",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anervalens-netizen/pdf-reader.git"
   }
 }
