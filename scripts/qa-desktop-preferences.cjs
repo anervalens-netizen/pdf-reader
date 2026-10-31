@@ -3,10 +3,11 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
+const packageVersion = require(path.join(root, 'package.json')).version
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function main() {
-  ipcMain.handle('pdf:app-info', () => ({ version: '1.2.1', platform: process.platform, updatesSupported: false }))
+  ipcMain.handle('pdf:app-info', () => ({ version: packageVersion, platform: process.platform, updatesSupported: false }))
   ipcMain.handle('pdf:titlebar-theme', () => undefined)
   ipcMain.handle('pdf:is-maximized', () => false)
   ipcMain.handle('pdf:check-updates', () => ({ status: 'not-available' }))

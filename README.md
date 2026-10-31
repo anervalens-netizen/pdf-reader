@@ -9,7 +9,7 @@ Un singur renderer (React + PDF.js) este folosit pe următoarele ținte:
 
 | Țintă | Formă | Status |
 | --- | --- | --- |
-| **Windows** | instalator NSIS (`PDF-Setup-1.2.1.exe`) | CI Windows verificat; instalarea nativă este de confirmat |
+| **Windows** | instalator NSIS (`PDF-Setup-1.2.2.exe`) | CI Windows verificat; instalarea nativă este de confirmat |
 | **Linux** | AppImage + `deb` | pachetul `deb` 1.1.1 instalat și testat pe Dell |
 | **Android** | APK semnat (Capacitor) + PWA instalabilă | APK 1.1.1 instalat și testat pe OnePlus 6T |
 | **Web** | PWA instalabilă, funcționează offline | gata |
@@ -19,6 +19,15 @@ Descărcările sunt în [Releases](https://github.com/anervalens-netizen/pdf-rea
 În release-urile 1.1.2 și 1.2.0, folosește `app-release.apk` pentru Android;
 `app-debug.apk` este destinat depanării și folosește altă semnătură. Actualizarea directă
 de la debug la release nu este posibilă fără migrarea datelor aplicației.
+
+---
+
+## Versiunea 1.2.2 — corecții de navigare și setări
+
+- Butonul Android Back închide mai întâi meniul cu trei puncte sau dialogul Preferințe / Despre PDF. Nu închide documentul și nu părăsește aplicația cât timp unul dintre acestea este deschis.
+- Preferința de verificare automată a actualizărilor se recitește la fiecare deschidere a dialogului, inclusiv după modificări făcute în fereastra Actualizări.
+- Teste noi de regresie pentru navigarea mobilă și sincronizarea preferințelor desktop; CI Windows, Linux și Android și re-review Codex fără findings pentru PR #9.
+- APK-ul `app-release.apk` este semnat cu aceeași identitate de distribuție. Android `versionCode` crește la 10, astfel încât instalarea peste versiunea 1.2.1 semnată rămâne posibilă fără ștergerea datelor.
 
 ---
 
