@@ -17,11 +17,11 @@ const path = require('node:path')
 const root = path.resolve(__dirname, '..')
 const svgPath = path.join(root, 'build', 'logo.svg')
 
-/** Brand red used as the background of the Android adaptive icon. */
-const BRAND_RED = '#DE2C21'
+/** Brand blue used as the background of the Android adaptive icon. */
+const BRAND_BLUE = '#096FF2'
 
 /** Warm app background, used for the maskable PWA icon and the splash. */
-const APP_BACKGROUND = '#F7F5F2'
+const APP_BACKGROUND = '#F1F7FF'
 
 const targets = [
   { file: path.join(root, 'build', 'icon.png'), size: 512 },

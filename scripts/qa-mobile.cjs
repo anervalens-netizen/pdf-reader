@@ -22,6 +22,19 @@ async function main() {
   try {
     await win.loadURL(`http://127.0.0.1:${server.address().port}/`)
     for(let i=0;i<200 && !(await evaluate("!!document.querySelector('.welcome')"));i++) await delay(100)
+    // Regression: Android/PWA overflow is actionable, not decorative.
+    assert(await evaluate("!!document.querySelector('[aria-label=\"Meniu PDF\"]')"), 'mobile menu button missing')
+    await evaluate("document.querySelector('[aria-label=\"Meniu PDF\"]').click()")
+    assert(await evaluate("document.querySelector('.app-menu__popup--mobile')?.textContent.includes('Preferințe')"), 'mobile menu did not open')
+    await evaluate("[...document.querySelectorAll('.app-menu__item')].find(b=>b.textContent.trim()==='Preferințe…').click()")
+    assert(await evaluate("!!document.querySelector('[aria-label=\"Preferințe PDF\"]')"), 'preferences modal missing')
+    await evaluate("document.querySelectorAll('input[name=pdf-theme]')[2].click()")
+    await evaluate("document.querySelector('.app-menu__modal .btn--primary').click()")
+    await evaluate("document.querySelector('[aria-label=\"Meniu PDF\"]').click()")
+    await evaluate("[...document.querySelectorAll('.app-menu__item')].find(b=>b.textContent.trim()==='Despre PDF').click()")
+    assert(await evaluate("document.querySelector('[aria-label=\"Despre PDF\"]')?.textContent.includes('Versiune')"), 'about modal missing')
+    await evaluate("document.querySelector('.app-menu__modal .btn--primary').click()")
+    console.log('OK — mobile overflow, preferences and About are functional')
     await evaluate(`(async()=>{const b=await (await fetch('/sample.pdf')).arrayBuffer(); const dt=new DataTransfer();dt.items.add(new File([b],'qa.pdf',{type:'application/pdf'}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}))})()`)
     for(let i=0;i<300 && !(await evaluate("!!document.querySelector('.page canvas')"));i++) await delay(100)
     if (!(await evaluate("!!document.querySelector('.page canvas')"))) {

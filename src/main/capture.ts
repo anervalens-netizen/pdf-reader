@@ -40,6 +40,35 @@ export async function runCaptureSequence(
 
   await wait(2200)
   await capture('01-welcome')
+  if (process.env.PDF_CAPTURE_MENU_CHECK) {
+    const probe = await win.webContents.executeJavaScript(`(async () => {
+      const menu = document.querySelector('.app-menu--desktop');
+      if (!menu) return { error: 'desktop menu missing' };
+      const trigger = label => [...menu.querySelectorAll('.app-menu__trigger')].find(b => b.textContent?.trim() === label);
+      trigger('Fișier')?.click();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const fileOpen = [...menu.querySelectorAll('.app-menu__item')].some(b => b.textContent?.trim() === 'Deschide…');
+      trigger('Setări')?.click();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      [...menu.querySelectorAll('.app-menu__item')].find(b => b.textContent?.trim() === 'Preferințe…')?.click();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const preferences = !!document.querySelector('[aria-label="Preferințe PDF"]');
+      document.querySelector('.app-menu__modal .btn--primary')?.click();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      trigger('Ajutor')?.click();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      [...menu.querySelectorAll('.app-menu__item')].find(b => b.textContent?.trim() === 'Despre PDF')?.click();
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const about = !!document.querySelector('[aria-label="Despre PDF"]');
+      const version = document.querySelector('.app-menu__modal')?.textContent?.includes('1.2.1');
+      document.querySelector('.app-menu__modal .btn--primary')?.click();
+      return {fileOpen, preferences, about, version};
+    })()`, true)
+    if (!probe.fileOpen || !probe.preferences || !probe.about || !probe.version) {
+      throw new Error('Desktop menu smoke failed: ' + JSON.stringify(probe))
+    }
+    console.log('[capture] native desktop menu, Settings, About and version verified: ' + JSON.stringify(probe))
+  }
 
   authorizePdfPath(samplePdf)
   win.webContents.send('pdf:file-opened', { path: samplePdf, name: 'pdf-sample.pdf' })
