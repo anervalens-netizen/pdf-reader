@@ -63,6 +63,10 @@ export default function App(): JSX.Element {
   const [editText, setEditText] = useState('')
   const [editFontSize, setEditFontSize] = useState(14)
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const menuBackHandlerRef = useRef<(() => boolean) | null>(null)
+  const registerMenuBack = useCallback((handler: (() => boolean) | null): void => {
+    menuBackHandlerRef.current = handler
+  }, [])
 
   // Android ACTION_VIEW: receive PDFs sent via "Open with" by file managers.
   useEffect(() => {
@@ -341,6 +345,8 @@ export default function App(): JSX.Element {
   // a ref, so the native listener never closes over a stale render.
   const backHandlerRef = useRef<() => boolean>(() => false)
   backHandlerRef.current = (): boolean => {
+    // Menu-owned dialogs and overflow are always above the document.
+    if (menuBackHandlerRef.current?.()) return true
     if (aiOpen) { setAiOpen(false); return true }
     if (pagesOpen) {
       setPagesOpen(false)
@@ -369,6 +375,15 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     void registerBackHandler(() => backHandlerRef.current())
+  }, [])
+
+  // Escape and Android Back share the same menu-dismissal path.
+  useEffect(() => {
+    const dismissMenu = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && menuBackHandlerRef.current?.()) event.preventDefault()
+    }
+    window.addEventListener('keydown', dismissMenu)
+    return () => window.removeEventListener('keydown', dismissMenu)
   }, [])
 
   const commitNote = useCallback(() => {
@@ -449,7 +464,7 @@ export default function App(): JSX.Element {
   return (
     <div className={isDesktop ? "app app--desktop" : "app"} data-platform={api.platform()}>
       <TitleBar />
-      <AppMenu variant={isDesktop ? "desktop" : "mobile"} onSignature={() => setSignatureOpen(true)} onPages={() => setPagesOpen(true)} onAi={() => setAiOpen((open) => !open)} />
+      <AppMenu variant={isDesktop ? "desktop" : "mobile"} onRegisterBack={registerMenuBack} onSignature={() => setSignatureOpen(true)} onPages={() => setPagesOpen(true)} onAi={() => setAiOpen((open) => !open)} />
       <Toolbar onSignatureRequest={() => setSignatureOpen(true)} onPagesRequest={() => setPagesOpen(true)} onAiRequest={() => setAiOpen((open) => !open)} />
 
       <div className="app__body">
